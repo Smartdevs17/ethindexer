@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Transfer {
+  id          String   @id @default(cuid())
+  blockNumber BigInt
+  txHash      String
+  from        String
+  to          String
+  value       BigInt
+  token       Token    @relation(fields: [tokenId], references: [id])
+  tokenId     String
+  timestamp   DateTime
+  gasUsed     BigInt?
+  gasPrice    BigInt?
+  indexed     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  @@index([from])
+  @@index([to])
+  @@index([blockNumber])
+  @@index([timestamp])
+}
+
+model Token {
+  id          String     @id @default(cuid())
+  address     String     @unique
+  name        String?
+  symbol      String?
+  decimals    Int?
+  totalSupply BigInt?
+  transfers   Transfer[]
+  createdAt   DateTime   @default(now())
+}
+
+model IndexingJob {
+  id          String   @id @default(cuid())
+  query       String
+  config      Json
+  status      String
+  fromBlock   BigInt?
+  toBlock     BigInt?
+  addresses   String[]
+  events      String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ApiEndpoint {
+  id          String   @id @default(cuid())
+  path        String   @unique
+  query       String
+  sqlQuery    String
+  parameters  Json
+  description String?
+  createdAt   DateTime @default(now())
+  lastUsed    DateTime?
+  useCount    Int      @default(0)
+}
