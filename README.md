@@ -50,7 +50,7 @@ ethindexer/
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/ethindexer.git
+   git clone https://github.com/Smartdevs17/ethindexer.git
    cd ethindexer/backend
    ```
 
