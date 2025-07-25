@@ -10,17 +10,20 @@ EthIndexer is an intelligent blockchain data indexing platform that allows users
 - **Natural Language Processing**: Index blockchain data using simple English commands
 - **ERC-20 Transfer Indexing**: Real-time indexing of token transfers
 - **AI-Powered Query Parsing**: OpenAI integration for intelligent command interpretation
-- **REST API**: Generated endpoints for accessing indexed data
-- **PostgreSQL Database**: Robust data storage with Sequelize ORM
-- **Production Ready**: Live deployment with >99% uptime
+- **Dynamic API Generation**: Auto-generated REST endpoints based on AI-parsed queries
+- **Type-Safe Database**: Prisma ORM with full TypeScript support
+- **Real-time Updates**: WebSocket streaming for live blockchain data
+- **Modular Architecture**: NestJS framework for scalable, maintainable code
+- **Production Ready**: Built with enterprise-grade tools and patterns
 
-### 🚧 Coming Soon (EthIndexer Expansion)
-- **Advanced Analytics Dashboard**: Interactive charts and data visualization
-- **Dynamic API Generation**: Auto-generated endpoints based on natural language queries
-- **Real-time WebSocket Streaming**: Live blockchain data updates
-- **Multi-token Support**: Beyond ERC-20 to all token standards
-- **Cross-chain Preparation**: Ready for multi-blockchain support
-- **Developer Tools**: API playground, code generation, webhooks
+### 🚧 Coming Soon
+- **Frontend Dashboard**: Scaffold-ETH 2 based interface with analytics
+- **Advanced Visualizations**: Interactive charts and data exploration tools
+- **Multi-token Support**: Beyond ERC-20 to all token standards and NFTs
+- **Cross-chain Indexing**: Support for multiple blockchains
+- **API Playground**: Interactive documentation and testing interface
+- **Webhook Notifications**: Real-time alerts for specific events
+- **Export Tools**: CSV, JSON, and direct database exports
 
 ## 🏗️ Architecture
 
@@ -28,14 +31,55 @@ EthIndexer is an intelligent blockchain data indexing platform that allows users
 ethindexer/
 ├── backend/                 # Node.js backend with AI integration
 │   ├── src/
-│   │   ├── config/         # Database and blockchain configuration
-│   │   ├── models/         # Sequelize data models
-│   │   ├── services/       # Core business logic
-│   │   ├── migrations/     # Database migrations
-│   │   └── utils/          # Helper functions
+│   │   ├── ai/             # OpenAI integration module
+│   │   ├── indexer/        # Blockchain indexing module
+│   │   ├── api/            # Dynamic API generation
+│   │   ├── database/       # Prisma service and models
+│   │   └── websocket/      # Real-time updates
+│   ├── prisma/             # Prisma schema and migrations
 │   └── package.json
 ├── frontend/               # Scaffold-ETH 2 based frontend (planned)
 └── docs/                  # Documentation
+```
+
+## 🗄️ Database Schema
+
+EthIndexer uses Prisma with PostgreSQL for robust data management:
+
+```prisma
+model Transfer {
+  id          String   @id @default(cuid())
+  blockNumber BigInt
+  txHash      String
+  from        String
+  to          String
+  value       BigInt
+  token       Token    @relation(fields: [tokenId], references: [id])
+  timestamp   DateTime
+  indexed     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  @@index([from, to, blockNumber])
+}
+
+model IndexingJob {
+  id        String   @id @default(cuid())
+  query     String   // Original natural language query
+  config    Json     // Parsed indexing configuration
+  status    String   // active, paused, completed, error
+  addresses String[] // Addresses to index
+  events    String[] // Event types to index
+  createdAt DateTime @default(now())
+}
+
+model ApiEndpoint {
+  id          String   @id @default(cuid())
+  path        String   @unique
+  query       String   // Original natural language query
+  sqlQuery    String   // Generated SQL
+  parameters  Json     // Expected parameters
+  useCount    Int      @default(0)
+}
 ```
 
 ## 🚀 Quick Start
@@ -61,32 +105,47 @@ ethindexer/
 
 3. **Configure environment**
    ```bash
-   cp env.sample .env
+   cp .env.example .env
    ```
    
    Update `.env` with your credentials:
    ```env
-   BASE_URL=http://localhost:3000
-   INFURA_URL=https://mainnet.infura.io/v3/YOUR_INFURA_KEY
-   DB_HOST=localhost
-   DB_USER=your_user
-   DB_PASSWORD=your_password
-   DB_NAME=ethindexer_db
-   DB_PORT=5432
-   OPEN_AI_KEY=your_openai_api_key
+   # Database
+   DATABASE_URL="postgresql://username:password@localhost:5432/ethindexer"
+   
+   # Blockchain
+   INFURA_URL="https://mainnet.infura.io/v3/YOUR_INFURA_KEY"
+   ALCHEMY_URL="https://eth-mainnet.alchemyapi.io/v2/YOUR_ALCHEMY_KEY"
+   
+   # AI
+   OPENAI_API_KEY="your_openai_api_key"
+   
+   # Server
+   PORT=3001
+   NODE_ENV=development
+   
+   # CORS
+   FRONTEND_URL="http://localhost:3000"
    ```
 
 4. **Set up database**
    ```bash
-   # Create your PostgreSQL database
-   createdb ethindexer_db
+   # Generate Prisma client
+   npx prisma generate
    
-   # Run migrations
-   npx sequelize-cli db:migrate
+   # Push schema to database (creates tables)
+   npx prisma db push
+   
+   # Optional: Open Prisma Studio to view data
+   npx prisma studio
    ```
 
 5. **Start the indexer**
    ```bash
+   # Development mode
+   npm run dev
+   
+   # Or production mode
    npm run start
    ```
 
@@ -119,25 +178,37 @@ GET /api/transfers?from=0x...
 
 # Get transfers with pagination
 GET /api/transfers?limit=100&offset=0
+
+# AI-powered natural language endpoint
+POST /ai/parse-query
+Content-Type: application/json
+{
+  "query": "Index USDC transfers from block 18000000"
+}
+
+# Get indexing job status
+GET /api/indexing-jobs
+
+# WebSocket connection for real-time updates
+WS /indexer (namespace)
 ```
 
 ## 🔧 Technology Stack
 
 ### Current (Backend)
-- **Runtime**: Node.js with TypeScript
-- **Database**: PostgreSQL with Sequelize ORM
-- **Blockchain**: Web3.js with Infura/Alchemy
+- **Framework**: NestJS with TypeScript
+- **Database**: PostgreSQL with Prisma ORM
+- **Blockchain**: Ethers.js with Infura/Alchemy
 - **AI**: OpenAI GPT-4 for natural language processing
-- **Environment**: dotenv for configuration
+- **Real-time**: WebSockets with Socket.io
+- **API Documentation**: Swagger/OpenAPI
 
-### Planned (Full Stack)
-- **Backend**: NestJS with Prisma ORM
+### Planned (Frontend)
 - **Frontend**: Next.js 13+ with Scaffold-ETH 2
 - **UI**: Tailwind CSS + shadcn/ui components
 - **Web3**: Wagmi + Viem for Ethereum interactions
 - **State**: Zustand + React Query
 - **Charts**: Recharts for data visualization
-- **Real-time**: WebSockets with Socket.io
 
 ## 🌐 Live Demo
 
@@ -154,10 +225,10 @@ GET /api/transfers?limit=100&offset=0
 ## 🗺️ Roadmap
 
 ### Phase 1: Foundation Enhancement (Weeks 1-2)
-- [ ] Migrate to NestJS architecture
-- [ ] Implement Prisma ORM
-- [ ] Enhanced AI query processing
-- [ ] Improved error handling
+- [ ] Enhanced AI query processing capabilities
+- [ ] Dynamic API endpoint generation
+- [ ] Improved error handling and logging
+- [ ] Advanced indexing configuration options
 
 ### Phase 2: Frontend & APIs (Weeks 3-4)
 - [ ] Scaffold-ETH 2 frontend implementation
