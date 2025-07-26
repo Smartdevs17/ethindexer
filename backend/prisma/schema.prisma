@@ -9,16 +9,16 @@ datasource db {
 
 model Transfer {
   id          String   @id @default(cuid())
-  blockNumber BigInt
+  blockNumber String   // Changed: BigInt -> String (universal & reliable)
   txHash      String
   from        String
   to          String
-  value       BigInt
+  value       String   // Changed: BigInt -> String (no serialization issues)
   token       Token    @relation(fields: [tokenId], references: [id])
   tokenId     String
   timestamp   DateTime
-  gasUsed     BigInt?
-  gasPrice    BigInt?
+  gasUsed     String?  // Changed: BigInt? -> String? (consistent with ethers.js)
+  gasPrice    String?  // Changed: BigInt? -> String? (works everywhere)
   indexed     Boolean  @default(true)
   tier        String   @default("hot") // "hot", "warm", "cold"
   createdAt   DateTime @default(now())
@@ -27,7 +27,7 @@ model Transfer {
   @@index([to])
   @@index([blockNumber])
   @@index([timestamp])
-  @@index([tier, timestamp]) // For efficient tier-based queries
+  @@index([tier, timestamp])
 }
 
 model Token {
@@ -36,12 +36,12 @@ model Token {
   name         String?
   symbol       String?
   decimals     Int?
-  totalSupply  BigInt?
+  totalSupply  String?    // Changed: BigInt? -> String? (universal compatibility)
   transfers    Transfer[]
   indexingTier String     @default("on-demand") // "popular", "on-demand", "archive"
-  isPopular    Boolean    @default(false) // Pre-indexed popular tokens
-  lastIndexed  DateTime?  // Last time this token was indexed
-  userRequests Int        @default(0) // Track demand for prioritization
+  isPopular    Boolean    @default(false)
+  lastIndexed  DateTime?
+  userRequests Int        @default(0)
   createdAt    DateTime   @default(now())
   
   @@index([isPopular])
@@ -49,22 +49,22 @@ model Token {
 }
 
 model IndexingJob {
-  id          String   @id @default(cuid())
-  query       String   // Original natural language query
-  config      Json     // Parsed indexing configuration
-  status      String   // "active", "paused", "completed", "error"
-  priority    String   @default("normal") // "high", "normal", "low"
-  tier        String   @default("warm") // "hot", "warm", "cold"
-  fromBlock   BigInt?
-  toBlock     BigInt?
-  addresses   String[] // Addresses to index
-  events      String[] // Event types to index
-  progress    Float    @default(0) // 0-100 completion percentage
-  blocksProcessed BigInt @default(0)
-  estimatedBlocks BigInt?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  completedAt DateTime?
+  id              String   @id @default(cuid())
+  query           String
+  config          Json
+  status          String   // "active", "paused", "completed", "error"
+  priority        String   @default("normal") // "high", "normal", "low"
+  tier            String   @default("warm") // "hot", "warm", "cold"
+  fromBlock       String?  // Changed: BigInt? -> String? (universal block numbers)
+  toBlock         String?  // Changed: BigInt? -> String? (works with all chains)
+  addresses       String[]
+  events          String[]
+  progress        Float    @default(0) // 0-100 completion percentage
+  blocksProcessed String   @default("0") // Changed: BigInt -> String (easy counting)
+  estimatedBlocks String?  // Changed: BigInt? -> String? (no overflow issues)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
   
   @@index([status, priority])
   @@index([tier])
@@ -73,12 +73,12 @@ model IndexingJob {
 model ApiEndpoint {
   id          String   @id @default(cuid())
   path        String   @unique
-  query       String   // Original natural language query
-  sqlQuery    String   // Generated SQL
-  parameters  Json     // Expected parameters
+  query       String
+  sqlQuery    String
+  parameters  Json
   description String?
-  tier        String   @default("warm") // Data tier this endpoint serves
-  cacheTime   Int      @default(300) // Cache duration in seconds
+  tier        String   @default("warm")
+  cacheTime   Int      @default(300)
   createdAt   DateTime @default(now())
   lastUsed    DateTime?
   useCount    Int      @default(0)
@@ -87,16 +87,15 @@ model ApiEndpoint {
   @@index([useCount])
 }
 
-// New model for tracking indexing strategy metrics
 model IndexingMetrics {
   id              String   @id @default(cuid())
   tokenAddress    String
   blockRange      String   // "18000000-18001000"
   tier            String   // "hot", "warm", "cold"
-  transferCount   BigInt
+  transferCount   String   // Changed: BigInt -> String (easy analytics)
   indexingTime    Int      // milliseconds
-  storageSize     BigInt   // bytes
-  queryCount      Int      @default(0) // How often this data is queried
+  storageSize     String   // Changed: BigInt -> String (universal storage tracking)
+  queryCount      Int      @default(0)
   lastAccessed    DateTime?
   createdAt       DateTime @default(now())
   

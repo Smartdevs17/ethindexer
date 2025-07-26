@@ -5,6 +5,7 @@ import { AiModule } from './ai/ai.module';
 import { ApiModule } from './api/api.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { DatabaseModule } from './database/database.module';
+import { AppController } from './app.controller';
 
 @Module({
   imports: [
@@ -17,5 +18,6 @@ import { DatabaseModule } from './database/database.module';
     ApiModule,
     WebsocketModule,
   ],
+  controllers: [AppController],
 })
 export class AppModule {}
