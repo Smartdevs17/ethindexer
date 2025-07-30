@@ -94,90 +94,135 @@ export class IndexerService {
     }
   }
 
-  // Index ERC-20 transfers for a specific token with batching
-  async indexTransfers(tokenAddress: string, fromBlock: number, toBlock?: number): Promise<number> {
-    this.logger.log(`🔍 Indexing transfers for ${tokenAddress} from block ${fromBlock}${toBlock ? ` to ${toBlock}` : ''}`);
+  // Updated indexTransfers method with 100-record limit
+async indexTransfers(tokenAddress: string, fromBlock?: number, toBlock?: number, maxRecords: number = 100): Promise<number> {
+  this.logger.log(`🔍 Indexing transfers for ${tokenAddress} (max ${maxRecords} records)`);
+  
+  try {
+    await this.ensureTokenExists(tokenAddress);
     
-    try {
-      // Ensure token exists in database
-      await this.ensureTokenExists(tokenAddress);
+    const actualToBlock = toBlock || await this.getLatestBlock();
+    const actualFromBlock = fromBlock || (actualToBlock - 50); // Default: last 50 blocks
+    
+    const token = await this.prisma.token.findUnique({
+      where: { address: tokenAddress.toLowerCase() }
+    });
+    
+    // Use very small chunks to avoid hitting limits
+    const chunkSize = 10;
+    let totalProcessed = 0;
+    
+    this.logger.log(`📦 Processing blocks ${actualFromBlock} to ${actualToBlock} (limit: ${maxRecords} records)`);
+    
+    // Process in small chunks and stop at maxRecords
+    for (let currentFrom = actualFromBlock; currentFrom <= actualToBlock && totalProcessed < maxRecords; currentFrom += chunkSize) {
+      const currentTo = Math.min(currentFrom + chunkSize - 1, actualToBlock);
       
-      const actualToBlock = toBlock || await this.getLatestBlock();
-      const totalBlocks = actualToBlock - fromBlock;
-      
-      // Use smaller chunks for popular tokens to avoid RPC limits
-      const token = await this.prisma.token.findUnique({
-        where: { address: tokenAddress }
-      });
-      
-      const chunkSize = token?.isPopular ? 10 : 20; // Smaller chunks for popular tokens
-      
-      this.logger.log(`📦 Processing ${totalBlocks} blocks in chunks of ${chunkSize}`);
-      
-      let totalProcessed = 0;
-      
-      // Process in chunks
-      for (let currentFrom = fromBlock; currentFrom < actualToBlock; currentFrom += chunkSize) {
-        const currentTo = Math.min(currentFrom + chunkSize - 1, actualToBlock);
+      try {
+        const remainingRecords = maxRecords - totalProcessed;
+        const chunkProcessed = await this.indexTransfersChunk(tokenAddress, currentFrom, currentTo, remainingRecords);
+        totalProcessed += chunkProcessed;
         
-        this.logger.log(`🔄 Processing chunk: blocks ${currentFrom} to ${currentTo}`);
+        this.logger.log(`📊 Processed: ${totalProcessed}/${maxRecords} records`);
         
-        try {
-          const chunkProcessed = await this.indexTransfersChunk(tokenAddress, currentFrom, currentTo);
-          totalProcessed += chunkProcessed;
-          
-          // Small delay to avoid overwhelming the RPC
-          await new Promise(resolve => setTimeout(resolve, 100));
-          
-        } catch (error) {
-          this.logger.error(`❌ Failed to process chunk ${currentFrom}-${currentTo}:`, error);
-          // Continue with next chunk instead of failing completely
+        if (totalProcessed >= maxRecords) {
+          this.logger.log(`✅ Reached limit of ${maxRecords} records`);
+          break;
         }
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+      } catch (error) {
+        this.logger.error(`❌ Failed to process chunk ${currentFrom}-${currentTo}:`, error);
       }
-
-      this.logger.log(`✅ Total processed: ${totalProcessed} transfers`);
-      return totalProcessed;
-      
-    } catch (error) {
-      this.logger.error(`❌ Failed to index transfers for ${tokenAddress}:`, error);
-      throw error;
     }
+
+    this.logger.log(`✅ Total processed: ${totalProcessed} transfers`);
+    return totalProcessed;
+    
+  } catch (error) {
+    this.logger.error(`❌ Failed to index transfers for ${tokenAddress}:`, error);
+    throw error;
   }
+}
 
-  // Process a single chunk of blocks
-  private async indexTransfersChunk(tokenAddress: string, fromBlock: number, toBlock: number): Promise<number> {
-    try {
-      // ERC-20 Transfer event signature: Transfer(address,address,uint256)
-      const transferTopic = ethers.id("Transfer(address,address,uint256)");
+// Updated chunk processing with record limit
+private async indexTransfersChunk(tokenAddress: string, fromBlock: number, toBlock: number, maxRecords: number = 100): Promise<number> {
+  try {
+    const transferTopic = ethers.id("Transfer(address,address,uint256)");
+    
+    const logs = await this.provider.getLogs({
+      address: tokenAddress,
+      topics: [transferTopic],
+      fromBlock,
+      toBlock
+    });
+
+    // Limit logs to maxRecords (take most recent)
+    const limitedLogs = logs.slice(-maxRecords);
+    
+    this.logger.log(`📊 Found ${logs.length} logs, processing ${limitedLogs.length} (limited to ${maxRecords})`);
+
+    let processedCount = 0;
+    for (const log of limitedLogs) {
+      if (processedCount >= maxRecords) break;
       
-      // Get transfer logs for this chunk
-      const logs = await this.provider.getLogs({
-        address: tokenAddress,
-        topics: [transferTopic],
-        fromBlock,
-        toBlock
-      });
-
-      this.logger.log(`📊 Found ${logs.length} transfer logs in chunk ${fromBlock}-${toBlock}`);
-
-      let processedCount = 0;
-      for (const log of logs) {
-        try {
-          await this.processTransferLog(log, tokenAddress);
-          processedCount++;
-        } catch (error) {
-          this.logger.error(`❌ Failed to process log ${log.transactionHash}:`, error);
-        }
+      try {
+        await this.processTransferLog(log, tokenAddress);
+        processedCount++;
+      } catch (error) {
+        this.logger.error(`❌ Failed to process log ${log.transactionHash}:`, error);
       }
-
-      return processedCount;
-      
-    } catch (error) {
-      this.logger.error(`❌ Failed to process chunk ${fromBlock}-${toBlock}:`, error);
-      throw error;
     }
-  }
 
+    return processedCount;
+    
+  } catch (error) {
+    this.logger.error(`❌ Failed to process chunk ${fromBlock}-${toBlock}:`, error);
+    throw error;
+  }
+}
+
+// Updated hot data indexing with limit
+async indexHotData(): Promise<void> {
+  this.logger.log('🔥 Starting hot data indexing (100 records max per token)...');
+  
+  try {
+    const latestBlock = await this.getLatestBlock();
+    const hotDataBlocks = 50; // Reduced to 50 blocks for efficiency
+    const fromBlock = latestBlock - hotDataBlocks;
+
+    this.logger.log(`🔥 Indexing last ${hotDataBlocks} blocks (${fromBlock} to ${latestBlock})`);
+
+    const popularTokens = await this.prisma.token.findMany({
+      where: { isPopular: true }
+    });
+
+    for (const token of popularTokens) {
+      this.logger.log(`🔥 Indexing hot data for ${token.symbol || token.address} (max 100 records)`);
+      
+      try {
+        await this.indexTransfers(token.address, fromBlock, latestBlock, 100); // Limit to 100 records
+        
+        await this.prisma.token.update({
+          where: { id: token.id },
+          data: { lastIndexed: new Date() }
+        });
+        
+        this.logger.log(`✅ Completed indexing for ${token.symbol}`);
+        
+      } catch (error) {
+        this.logger.error(`❌ Failed to index ${token.symbol}:`, error);
+      }
+    }
+
+    this.logger.log('✅ Hot data indexing completed');
+    
+  } catch (error) {
+    this.logger.error('❌ Hot data indexing failed:', error);
+    throw error;
+  }
+}
 private async processTransferLog(log: ethers.Log, tokenAddress: string) {
   try {
     // Decode transfer event
@@ -328,49 +373,6 @@ private async ensureTokenExists(tokenAddress: string) {
   }
 }
 
-  // Index hot data (recent blocks for popular tokens)
-  async indexHotData(): Promise<void> {
-    this.logger.log('🔥 Starting hot data indexing...');
-    
-    try {
-      const latestBlock = await this.getLatestBlock();
-      // Use smaller range for hot data to avoid RPC limits
-      const hotDataBlocks = this.config.get<number>('HOT_DATA_BLOCKS', 10); // Reduced from 1000 to 100
-      const fromBlock = latestBlock - hotDataBlocks;
-
-      this.logger.log(`🔥 Indexing last ${hotDataBlocks} blocks (${fromBlock} to ${latestBlock})`);
-
-      const popularTokens = await this.prisma.token.findMany({
-        where: { isPopular: true }
-      });
-
-      for (const token of popularTokens) {
-        this.logger.log(`🔥 Indexing hot data for ${token.symbol || token.address}`);
-        
-        try {
-          await this.indexTransfers(token.address, fromBlock, latestBlock);
-          
-          // Update last indexed time
-          await this.prisma.token.update({
-            where: { id: token.id },
-            data: { lastIndexed: new Date() }
-          });
-          
-          this.logger.log(`✅ Completed indexing for ${token.symbol}`);
-          
-        } catch (error) {
-          this.logger.error(`❌ Failed to index ${token.symbol}:`, error);
-          // Continue with next token instead of failing completely
-        }
-      }
-
-      this.logger.log('✅ Hot data indexing completed');
-      
-    } catch (error) {
-      this.logger.error('❌ Hot data indexing failed:', error);
-      throw error;
-    }
-  }
 
   // Get indexing statistics
   async getIndexingStats() {
