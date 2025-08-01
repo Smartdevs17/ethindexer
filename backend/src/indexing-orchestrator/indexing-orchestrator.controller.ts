@@ -1,4 +1,3 @@
-// src/orchestrator/indexing-orchestrator.controller.ts
 import { Controller, Post, Get, Body, Param, Query, Logger } from '@nestjs/common';
 import { IndexingOrchestratorService } from './indexing-orchestrator.service';
 

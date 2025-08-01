@@ -6,7 +6,7 @@ import { ApiModule } from './api/api.module';
 import { WebsocketModule } from './websocket/websocket.module';
 import { DatabaseModule } from './database/database.module';
 import { AppController } from './app.controller';
-import { IndexingOrchestratorModule } from './orchestrator/indexing-orchestrator.module';
+import { IndexingOrchestratorModule } from './indexing-orchestrator/indexing-orchestrator.module';
 
 @Module({
   imports: [
