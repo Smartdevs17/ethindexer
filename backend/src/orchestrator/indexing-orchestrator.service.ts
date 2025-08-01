@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { IndexerService } from '../indexer/indexer.service';
 import { AiService, IndexingConfig } from '../ai/ai.service';
 import { ethers } from 'ethers';
+import { DynamicApiService } from '../api/dynamic-api.service';
 
 export interface IndexingJobResult {
   jobId: string;
@@ -28,6 +29,7 @@ export class IndexingOrchestratorService {
     private readonly prisma: PrismaService,
     private readonly indexerService: IndexerService,
     private readonly aiService: AiService,
+    private readonly dynamicApiService: DynamicApiService,
   ) {
     // 🔧 Validate addresses on startup
     this.validateTokenAddresses();
@@ -236,6 +238,15 @@ export class IndexingOrchestratorService {
       // Mark job as completed
       await this.updateJobStatus(jobId, 'completed', `Successfully indexed ${totalProcessed} transfers`);
       await this.updateJobProgress(jobId, 100, totalProcessed);
+
+      // 🔥 NEW: Auto-generate API endpoint for completed job
+      this.logger.log(`🔧 Auto-generating API endpoint for job ${jobId}`);
+      const apiEndpoint = await this.dynamicApiService.generateApiFromJob(jobId);
+      if (apiEndpoint) {
+        this.logger.log(`✅ Generated API endpoint: ${apiEndpoint.path}`);
+      } else {
+        this.logger.warn(`⚠️ Failed to generate API endpoint for job ${jobId}`);
+      }
 
       this.logger.log(`✅ Job ${jobId} completed. Processed ${totalProcessed} transfers`);
 

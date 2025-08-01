@@ -4,10 +4,11 @@ import { IndexingOrchestratorService } from './indexing-orchestrator.service';
 import { IndexingOrchestratorController } from './indexing-orchestrator.controller';
 import { IndexerModule } from '../indexer/indexer.module';
 import { AiModule } from '../ai/ai.module';
+import { DynamicApiService } from 'src/api/dynamic-api.service';
 
 @Module({
   imports: [IndexerModule, AiModule],
-  providers: [IndexingOrchestratorService],
+  providers: [IndexingOrchestratorService, DynamicApiService],
   controllers: [IndexingOrchestratorController],
   exports: [IndexingOrchestratorService],
 })
