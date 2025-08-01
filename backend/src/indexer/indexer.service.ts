@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
 import { PrismaService } from '../database/prisma.service';
+import { IndexerGateway } from '../websocket/indexer.gateway';
+
 
 @Injectable()
 export class IndexerService {
@@ -33,6 +35,7 @@ export class IndexerService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly indexerGateway: IndexerGateway,
   ) {
     this.initializeProvider();
   }
@@ -94,7 +97,7 @@ export class IndexerService {
     }
   }
 
-  // Updated indexTransfers method with 100-record limit
+// Enhanced indexTransfers method with progress tracking:
 async indexTransfers(tokenAddress: string, fromBlock?: number, toBlock?: number, maxRecords: number = 100): Promise<number> {
   this.logger.log(`🔍 Indexing transfers for ${tokenAddress} (max ${maxRecords} records)`);
   
@@ -102,19 +105,25 @@ async indexTransfers(tokenAddress: string, fromBlock?: number, toBlock?: number,
     await this.ensureTokenExists(tokenAddress);
     
     const actualToBlock = toBlock || await this.getLatestBlock();
-    const actualFromBlock = fromBlock || (actualToBlock - 50); // Default: last 50 blocks
+    const actualFromBlock = fromBlock || (actualToBlock - 50);
     
     const token = await this.prisma.token.findUnique({
       where: { address: tokenAddress.toLowerCase() }
     });
     
-    // Use very small chunks to avoid hitting limits
+    // Emit indexing start status
+    this.indexerGateway.emitSystemStatus({
+      message: `Starting to index ${token?.symbol || tokenAddress.slice(0, 8)}... transfers`,
+      stage: 'indexing-start',
+      timestamp: new Date(),
+    });
+
     const chunkSize = 10;
     let totalProcessed = 0;
+    const totalBlocks = actualToBlock - actualFromBlock + 1;
     
     this.logger.log(`📦 Processing blocks ${actualFromBlock} to ${actualToBlock} (limit: ${maxRecords} records)`);
     
-    // Process in small chunks and stop at maxRecords
     for (let currentFrom = actualFromBlock; currentFrom <= actualToBlock && totalProcessed < maxRecords; currentFrom += chunkSize) {
       const currentTo = Math.min(currentFrom + chunkSize - 1, actualToBlock);
       
@@ -123,7 +132,18 @@ async indexTransfers(tokenAddress: string, fromBlock?: number, toBlock?: number,
         const chunkProcessed = await this.indexTransfersChunk(tokenAddress, currentFrom, currentTo, remainingRecords);
         totalProcessed += chunkProcessed;
         
-        this.logger.log(`📊 Processed: ${totalProcessed}/${maxRecords} records`);
+        // Calculate progress percentage
+        const blocksProcessed = currentTo - actualFromBlock + 1;
+        const progressPercent = Math.min((blocksProcessed / totalBlocks) * 100, 100);
+        
+        // Emit progress update
+        this.indexerGateway.emitSystemStatus({
+          message: `Processed: ${totalProcessed}/${maxRecords} transfers (${progressPercent.toFixed(1)}%)`,
+          stage: 'indexing-progress',
+          timestamp: new Date(),
+        });
+        
+        this.logger.log(`📊 Processed: ${totalProcessed}/${maxRecords} records (${progressPercent.toFixed(1)}%)`);
         
         if (totalProcessed >= maxRecords) {
           this.logger.log(`✅ Reached limit of ${maxRecords} records`);
@@ -137,10 +157,29 @@ async indexTransfers(tokenAddress: string, fromBlock?: number, toBlock?: number,
       }
     }
 
+    // Emit completion status
+    this.indexerGateway.emitSystemStatus({
+      message: `Completed indexing ${totalProcessed} transfers for ${token?.symbol || tokenAddress.slice(0, 8)}...`,
+      stage: 'indexing-complete',
+      timestamp: new Date(),
+    });
+
+    // Update token last indexed time
+    await this.prisma.token.update({
+      where: { id: token.id },
+      data: { lastIndexed: new Date() }
+    });
+
     this.logger.log(`✅ Total processed: ${totalProcessed} transfers`);
     return totalProcessed;
     
   } catch (error) {
+    this.indexerGateway.emitSystemStatus({
+      message: `Indexing failed for ${tokenAddress}: ${error.message}`,
+      stage: 'indexing-error',
+      timestamp: new Date(),
+    });
+    
     this.logger.error(`❌ Failed to index transfers for ${tokenAddress}:`, error);
     throw error;
   }
@@ -183,14 +222,20 @@ private async indexTransfersChunk(tokenAddress: string, fromBlock: number, toBlo
   }
 }
 
-// Updated hot data indexing with limit
+// Enhanced indexHotData with WebSocket updates:
 async indexHotData(): Promise<void> {
   this.logger.log('🔥 Starting hot data indexing (100 records max per token)...');
   
   try {
     const latestBlock = await this.getLatestBlock();
-    const hotDataBlocks = 50; // Reduced to 50 blocks for efficiency
+    const hotDataBlocks = 50;
     const fromBlock = latestBlock - hotDataBlocks;
+
+    this.indexerGateway.emitSystemStatus({
+      message: `Starting hot data indexing: blocks ${fromBlock} to ${latestBlock}`,
+      stage: 'hot-data-start',
+      timestamp: new Date(),
+    });
 
     this.logger.log(`🔥 Indexing last ${hotDataBlocks} blocks (${fromBlock} to ${latestBlock})`);
 
@@ -198,31 +243,54 @@ async indexHotData(): Promise<void> {
       where: { isPopular: true }
     });
 
-    for (const token of popularTokens) {
-      this.logger.log(`🔥 Indexing hot data for ${token.symbol || token.address} (max 100 records)`);
+    for (let i = 0; i < popularTokens.length; i++) {
+      const token = popularTokens[i];
+      const progressPercent = ((i + 1) / popularTokens.length) * 100;
+      
+      this.indexerGateway.emitSystemStatus({
+        message: `Hot data indexing: ${token.symbol || token.address.slice(0, 8)}... (${i + 1}/${popularTokens.length})`,
+        stage: 'hot-data-progress',
+        timestamp: new Date(),
+      });
+
+      this.logger.log(`🔥 Indexing hot data for ${token.symbol || token.address} (${i + 1}/${popularTokens.length})`);
       
       try {
-        await this.indexTransfers(token.address, fromBlock, latestBlock, 100); // Limit to 100 records
+        await this.indexTransfers(token.address, fromBlock, latestBlock, 100);
         
         await this.prisma.token.update({
           where: { id: token.id },
           data: { lastIndexed: new Date() }
         });
         
-        this.logger.log(`✅ Completed indexing for ${token.symbol}`);
+        this.logger.log(`✅ Completed hot data indexing for ${token.symbol}`);
         
       } catch (error) {
-        this.logger.error(`❌ Failed to index ${token.symbol}:`, error);
+        this.logger.error(`❌ Failed to index hot data for ${token.symbol}:`, error);
       }
     }
+
+    this.indexerGateway.emitSystemStatus({
+      message: 'Hot data indexing completed successfully',
+      stage: 'hot-data-complete',
+      timestamp: new Date(),
+    });
 
     this.logger.log('✅ Hot data indexing completed');
     
   } catch (error) {
+    this.indexerGateway.emitSystemStatus({
+      message: `Hot data indexing failed: ${error.message}`,
+      stage: 'hot-data-error',
+      timestamp: new Date(),
+    });
+    
     this.logger.error('❌ Hot data indexing failed:', error);
     throw error;
   }
 }
+
+// Process individual transfer log
 private async processTransferLog(log: ethers.Log, tokenAddress: string) {
   try {
     // Decode transfer event
@@ -290,7 +358,7 @@ private async processTransferLog(log: ethers.Log, tokenAddress: string) {
     }
 
     // Create transfer record - clean and simple!
-    await this.prisma.transfer.create({
+    const transfer = await this.prisma.transfer.create({
       data: {
         blockNumber: blockNumber,
         txHash: log.transactionHash,
@@ -298,16 +366,34 @@ private async processTransferLog(log: ethers.Log, tokenAddress: string) {
         to: to.toLowerCase(),
         value: transferValue,
         tokenId: token.id,
-        timestamp: new Date(Number(block.timestamp) * 1000),
-        gasUsed: gasUsed,
-        gasPrice: gasPrice,
-        tier: token.isPopular ? 'hot' : 'warm',
-        indexed: true
+        timestamp: new Date(block.timestamp * 1000),
+        gasUsed,
+        gasPrice,
+        indexed: true,
+        tier: 'hot'
+      },
+      include: {
+        token: true // Include token details for WebSocket event
       }
     });
 
-    this.logger.debug(`✅ Saved transfer: ${from.slice(0,6)}...${from.slice(-4)} -> ${to.slice(0,6)}...${to.slice(-4)} (${transferValue})`);
+    // 🚀 EMIT WEBSOCKET EVENT FOR NEW TRANSFER
+    this.indexerGateway.emitNewTransfer({
+      id: transfer.id,
+      txHash: transfer.txHash,
+      from: transfer.from,
+      to: transfer.to,
+      value: transfer.value,
+      token: {
+        address: transfer.token.address,
+        symbol: transfer.token.symbol,
+        name: transfer.token.name,
+      },
+      blockNumber: transfer.blockNumber,
+      timestamp: transfer.timestamp,
+    });
 
+    this.logger.log(`✅ Transfer processed and broadcast: ${log.transactionHash}`);
   } catch (error) {
     this.logger.error(`❌ Failed to process transfer log: ${error.message}`);
     this.logger.error(`Transaction: ${log.transactionHash}, Block: ${log.blockNumber}`);

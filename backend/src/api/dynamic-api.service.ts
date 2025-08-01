@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { IndexingConfig } from '../ai/ai.service';
+import { IndexerGateway } from 'src/websocket/indexer.gateway';
 
 export interface ApiEndpointConfig {
   path: string;
@@ -31,7 +32,10 @@ export interface DynamicApiResponse {
 export class DynamicApiService {
   private readonly logger = new Logger(DynamicApiService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,     
+    private readonly indexerGateway: IndexerGateway,
+) {}
 
   /**
    * 🔥 Main method: Generate API endpoint from completed indexing job
@@ -446,5 +450,32 @@ export class DynamicApiService {
       cacheTime: endpoint.cacheTime,
       lastUsed: endpoint.lastUsed,
     }));
+  }
+
+
+/**
+ * 📄 Create a new API endpoint
+ */
+  async createApiEndpoint(path: string, query: string, sqlQuery: string): Promise<void> {
+    // Create the API endpoint in database
+    const endpoint = await this.prisma.apiEndpoint.create({
+      data: {
+        path,
+        query,
+        sqlQuery,
+        parameters: {},
+        description: `Auto-generated endpoint for: ${query}`,
+      },
+    });
+
+    // 🚀 EMIT WEBSOCKET EVENT FOR NEW API
+    this.indexerGateway.emitApiCreated({
+      path: endpoint.path,
+      query: endpoint.query,
+      description: endpoint.description,
+      timestamp: new Date(),
+    });
+
+    this.logger.log(`🔗 Created new API endpoint: ${path}`);
   }
 }

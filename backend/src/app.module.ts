@@ -7,6 +7,8 @@ import { WebsocketModule } from './websocket/websocket.module';
 import { DatabaseModule } from './database/database.module';
 import { AppController } from './app.controller';
 import { IndexingOrchestratorModule } from './indexing-orchestrator/indexing-orchestrator.module';
+import { OrchestratorModule } from './orchestrator/orchestrator.module'; // Add this
+
 
 @Module({
   imports: [
@@ -19,6 +21,7 @@ import { IndexingOrchestratorModule } from './indexing-orchestrator/indexing-orc
     ApiModule,
     WebsocketModule,
     IndexingOrchestratorModule,
+    OrchestratorModule,
   ],
   controllers: [AppController],
 })
