@@ -1,4 +1,3 @@
-// src/orchestrator/indexing-orchestrator.module.ts
 import { Module } from '@nestjs/common';
 import { IndexingOrchestratorService } from './indexing-orchestrator.service';
 import { IndexingOrchestratorController } from './indexing-orchestrator.controller';

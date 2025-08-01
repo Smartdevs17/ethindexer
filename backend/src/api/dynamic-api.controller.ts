@@ -1,4 +1,3 @@
-// src/api/dynamic-api.controller.ts
 import { Controller, Get, Query, Param, Logger, NotFoundException } from '@nestjs/common';
 import { DynamicApiService } from './dynamic-api.service';
 

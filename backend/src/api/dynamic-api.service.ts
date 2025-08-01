@@ -1,4 +1,3 @@
-// src/api/dynamic-api.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { IndexingConfig } from '../ai/ai.service';
