@@ -22,6 +22,7 @@ import { OrchestratorModule } from './orchestrator/orchestrator.module'; // Add 
     WebsocketModule,
     IndexingOrchestratorModule,
     OrchestratorModule,
+    
   ],
   controllers: [AppController],
 })
