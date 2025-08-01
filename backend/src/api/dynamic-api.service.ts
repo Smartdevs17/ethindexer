@@ -1,3 +1,4 @@
+// src/api/dynamic-api.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { IndexingConfig } from '../ai/ai.service';
@@ -51,7 +52,7 @@ export class DynamicApiService {
       }
 
       const config = job.config as unknown as IndexingConfig;
-      
+
       // Generate endpoint configuration
       const endpointConfig = await this.createEndpointConfig(config, job);
       
@@ -201,17 +202,17 @@ export class DynamicApiService {
     let baseQuery = `
       SELECT 
         t.id,
-        t.blockNumber,
-        t.txHash,
+        t."blockNumber",
+        t."txHash",
         t."from",
         t."to", 
         t.value,
         t.timestamp,
-        t.gasUsed,
-        t.gasPrice,
+        t."gasUsed",
+        t."gasPrice",
         tk.symbol,
-        tk.name as tokenName,
-        tk.address as tokenAddress
+        tk."name" as "tokenName",
+        tk.address as "tokenAddress"
       FROM "Transfer" t
       JOIN "Token" tk ON t."tokenId" = tk.id
       WHERE 1=1
@@ -223,7 +224,7 @@ export class DynamicApiService {
       baseQuery += ` AND tk.address IN (${addressList})`;
     }
 
-    // Add block filters
+    // Add block filters (always quote blockNumber)
     if (config.fromBlock) {
       baseQuery += ` AND CAST(t."blockNumber" AS INTEGER) >= ${config.fromBlock}`;
     }
@@ -373,10 +374,19 @@ export class DynamicApiService {
       dynamicFilters += ` AND CAST(t.value AS DECIMAL) <= ${params.maxValue}`;
     }
 
-    // Replace placeholders
-    const query = baseSql
+    // Always quote blockNumber, gasUsed, gasPrice, txHash, and name in ORDER BY and SELECT
+    const sortByColumn = this.getSortByColumn(params.sortBy || 'timestamp');
+
+    let safeBaseSql = baseSql
+      .replace(/t\.blockNumber/g, 't."blockNumber"')
+      .replace(/t\.gasUsed/g, 't."gasUsed"')
+      .replace(/t\.gasPrice/g, 't."gasPrice"')
+      .replace(/t\.txHash/g, 't."txHash"')
+      .replace(/tk\.name/g, 'tk."name"');
+
+    const query = safeBaseSql
       .replace('{{DYNAMIC_FILTERS}}', dynamicFilters)
-      .replace('{{SORT_BY}}', `t."${params.sortBy || 'timestamp'}"`)
+      .replace('{{SORT_BY}}', sortByColumn)
       .replace('{{SORT_ORDER}}', params.sortOrder || 'DESC')
       .replace('{{LIMIT}}', params.limit || '100')
       .replace('{{OFFSET}}', params.offset || '0');
@@ -390,6 +400,22 @@ export class DynamicApiService {
     `;
 
     return { query, countQuery };
+  }
+
+  /**
+   * 🔧 Get properly quoted sort column name
+   */
+  private getSortByColumn(sortBy: string): string {
+    const columnMap: Record<string, string> = {
+      'timestamp': 't.timestamp',
+      'blockNumber': 't."blockNumber"',
+      'value': 't.value',
+      'from': 't."from"',
+      'to': 't."to"',
+      'txHash': 't."txHash"'
+    };
+    
+    return columnMap[sortBy] || 't.timestamp';
   }
 
   /**
