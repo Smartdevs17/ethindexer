@@ -30,6 +30,8 @@ export const EthIndexerDashboard = () => {
   const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [backendStats, setBackendStats] = useState<any>(null);
+  // Track recently created jobs (jobId strings)
+  const [recentlyCreatedJobs, setRecentlyCreatedJobs] = useState<string[]>([]);
 
   // Load backend stats on component mount
   useEffect(() => {
@@ -55,10 +57,17 @@ export const EthIndexerDashboard = () => {
 
   const handleCreateJob = async () => {
     if (!queryInput.trim()) return;
-    
     setIsCreatingJob(true);
     try {
-      await createJob(queryInput);
+      const result = await createJob(queryInput);
+      // Track recently created jobs
+      if (result && result.jobId) {
+        setRecentlyCreatedJobs(prev => [result.jobId, ...prev.slice(0, 4)]);
+        // Remove from recently created after 60 seconds
+        setTimeout(() => {
+          setRecentlyCreatedJobs(prev => prev.filter(id => id !== result.jobId));
+        }, 60000);
+      }
       setQueryInput('');
     } catch (error) {
       console.error('Failed to create job:', error);
@@ -243,9 +252,9 @@ export const EthIndexerDashboard = () => {
           
           {/* Active Jobs */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Active Jobs ({jobs.length})
-            </h2>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            Active Jobs ({jobs.length + recentlyCreatedJobs.length})
+          </h2>
             
             <div className="space-y-4 max-h-96 overflow-y-auto">
               {jobs.length === 0 ? (

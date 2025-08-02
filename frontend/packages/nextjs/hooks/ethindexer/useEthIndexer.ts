@@ -93,12 +93,20 @@ export const useEthIndexer = () => {
             timestamp: new Date(data.timestamp || new Date())
           };
           
-          // Remove completed jobs after a delay
+          // // Remove completed jobs after a delay
+          // if (data.status === 'completed' || data.progress >= 100) {
+          //   setTimeout(() => {
+          //     setJobs(prev => prev.filter(job => job.jobId !== data.jobId));
+          //     addDebugInfo(`Removed completed job: ${data.jobId?.slice(0, 8)}...`);
+          //   }, 10000); // Keep visible for 10 seconds
+          // }
+
+         // In job-progress-global handler, change:
           if (data.status === 'completed' || data.progress >= 100) {
             setTimeout(() => {
               setJobs(prev => prev.filter(job => job.jobId !== data.jobId));
               addDebugInfo(`Removed completed job: ${data.jobId?.slice(0, 8)}...`);
-            }, 10000); // Keep visible for 10 seconds
+            }, 30000); // Change from 10000 to 30000 (30 seconds)
           }
           
           return updated;
@@ -152,42 +160,56 @@ export const useEthIndexer = () => {
     };
   }, []);
 
-  // Function to create a new indexing job
-  const createJob = async (query: string) => {
-    if (!query.trim()) {
-      throw new Error('Query cannot be empty');
+ // Function to create a new indexing job
+const createJob = async (query: string) => {
+  if (!query.trim()) {
+    throw new Error('Query cannot be empty');
+  }
+
+  addDebugInfo(`Creating job with query: ${query}`);
+
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/orchestrator/execute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
 
-    addDebugInfo(`Creating job with query: ${query}`);
-
-    try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/orchestrator/execute`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('✅ Job created:', result);
-      addDebugInfo(`Job creation response: ${result.success ? 'Success' : 'Failed'}`);
+    const result = await response.json();
+    console.log('✅ Job created:', result);
+    addDebugInfo(`Job creation response: ${result.success ? 'Success' : 'Failed'}`);
+    
+    // 🚀 IMMEDIATELY ADD JOB TO STATE (don't wait for WebSocket)
+    if (result.jobId) {
+      const immediateJob = {
+        jobId: result.jobId,
+        message: 'Job created, starting...',
+        progress: 0,
+        status: 'active',
+        timestamp: new Date()
+      };
       
-      // Subscribe to job updates
-      if (socket && result.jobId) {
-        socket.emit('subscribe-to-job', { jobId: result.jobId });
-        addDebugInfo(`Subscribed to job: ${result.jobId.slice(0, 8)}...`);
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('❌ Failed to create job:', error);
-      addDebugInfo(`Job creation failed: ${error}`);
-      throw error;
+      setJobs(prev => [immediateJob, ...prev]);
+      addDebugInfo(`Immediately added job: ${result.jobId.slice(0, 8)}...`);
     }
-  };
+    
+    // Subscribe to job updates
+    if (socket && result.jobId) {
+      socket.emit('subscribe-to-job', { jobId: result.jobId });
+      addDebugInfo(`Subscribed to job: ${result.jobId.slice(0, 8)}...`);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Failed to create job:', error);
+    addDebugInfo(`Job creation failed: ${error}`);
+    throw error;
+  }
+};
 
   // Function to fetch jobs from API
   const fetchJobs = async () => {
