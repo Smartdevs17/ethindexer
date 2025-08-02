@@ -21,17 +21,21 @@ export const EthIndexerDashboard = () => {
     systemStatus, 
     connectedClients,
     debugInfo,
+    activeJobsCount,
+    completedJobsCount,
+    totalJobsCount,
     createJob,
     fetchJobs,
-    getStats 
+    refreshJobs,
+    getStats,
+    removeJob
   } = useEthIndexer();
 
   const [queryInput, setQueryInput] = useState('');
   const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [backendStats, setBackendStats] = useState<any>(null);
-  // Track recently created jobs (jobId strings)
-  const [recentlyCreatedJobs, setRecentlyCreatedJobs] = useState<string[]>([]);
+  const [showCompletedJobs, setShowCompletedJobs] = useState(true);
 
   // Load backend stats on component mount
   useEffect(() => {
@@ -59,21 +63,13 @@ export const EthIndexerDashboard = () => {
     if (!queryInput.trim()) return;
     setIsCreatingJob(true);
     try {
-      const result = await createJob(queryInput);
-      // Track recently created jobs
-      if (result && result.jobId) {
-        setRecentlyCreatedJobs(prev => [result.jobId, ...prev.slice(0, 4)]);
-        // Remove from recently created after 60 seconds
-        setTimeout(() => {
-          setRecentlyCreatedJobs(prev => prev.filter(id => id !== result.jobId));
-        }, 60000);
-      }
+      await createJob(queryInput);
       setQueryInput('');
     } catch (error) {
       console.error('Failed to create job:', error);
       alert(
         `Failed to create job: ${
-          error instanceof Error ? error.message : String(error)
+          error instanceof Error ? error.message : 'Unknown error'
         }`
       );
     } finally {
@@ -81,138 +77,79 @@ export const EthIndexerDashboard = () => {
     }
   };
 
-  const handleQuickAction = async (action: string) => {
-    try {
-      switch (action) {
-        case 'hot-data':
-          await EthIndexerAPI.indexHotData();
-          break;
-        case 'popular-tokens':
-          await EthIndexerAPI.initializePopularTokens();
-          break;
-        case 'fetch-jobs':
-          await fetchJobs();
-          break;
-        case 'get-stats':
-          getStats();
-          break;
-      }
-    } catch (error) {
-      console.error(`Failed to execute ${action}:`, error);
-      alert(
-        `Failed to execute ${action}: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleCreateJob();
     }
   };
 
+  // Filter jobs based on toggle
+  const displayJobs = showCompletedJobs 
+    ? jobs 
+    : jobs.filter(job => job.status !== 'completed');
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-      <div className="container mx-auto px-4 py-8 max-w-7xl">
-        
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent mb-4">
+          <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
             🚀 EthIndexer Dashboard
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300 mb-6">
-            AI-Powered Blockchain Data Indexing Platform
+          <p className="text-gray-600 dark:text-gray-400">
+            AI-powered blockchain data indexing with natural language queries
           </p>
           
-          {/* Status Bar */}
-          <div className="flex flex-wrap justify-center items-center gap-4 mb-6">
-            <div className={`px-4 py-2 rounded-full text-sm font-medium ${
-              isConnected 
-                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' 
-                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-            }`}>
-              {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+          {/* Connection Status */}
+          <div className="flex items-center justify-center mt-4 space-x-4">
+            <div className={`flex items-center space-x-2 ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
+              <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-sm font-medium">
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </span>
             </div>
-            
-            <div className="px-4 py-2 bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-full text-sm font-medium">
-              🏗️ {jobs.length} Active Jobs
-            </div>
-            
-            <div className="px-4 py-2 bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200 rounded-full text-sm font-medium">
-              💰 {transfers.length} Recent Transfers
-            </div>
-            
-            <div className="px-4 py-2 bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-full text-sm font-medium">
-              👥 {connectedClients} Clients
-            </div>
-
-            {backendStats?.indexerStats && (
-              <div className="px-4 py-2 bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200 rounded-full text-sm font-medium">
-                📦 Block {backendStats.indexerStats.blockchain?.latestBlock}
-              </div>
+            {connectedClients > 0 && (
+              <span className="text-sm text-gray-500">
+                {connectedClients} client{connectedClients !== 1 ? 's' : ''} connected
+              </span>
             )}
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Query Input */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Create Indexing Job
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+            ✨ Create Indexing Job
           </h2>
           
           <div className="space-y-4">
-            {/* Query Input */}
             <div className="flex gap-4">
               <input
                 type="text"
-                placeholder="Enter your indexing query..."
                 value={queryInput}
                 onChange={(e) => setQueryInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !isCreatingJob && handleCreateJob()}
-                className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                onKeyPress={handleKeyPress}
+                placeholder="Enter your natural language query (e.g., 'Index USDC transfers from block 18000000')"
+                className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 disabled={isCreatingJob}
               />
-              
               <button
                 onClick={handleCreateJob}
                 disabled={isCreatingJob || !queryInput.trim()}
-                className="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-w-[120px]"
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
               >
-                {isCreatingJob ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Creating...
-                  </div>
-                ) : (
-                  'Create Job'
-                )}
+                {isCreatingJob ? '⏳ Creating...' : '🚀 Create Job'}
               </button>
             </div>
 
-            {/* Quick Actions */}
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => handleQuickAction('hot-data')}
-                className="px-3 py-1 text-sm bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 rounded-md hover:bg-orange-200 dark:hover:bg-orange-800 transition-colors"
-              >
-                🔥 Index Hot Data
-              </button>
-              
-              <button
-                onClick={() => handleQuickAction('popular-tokens')}
-                className="px-3 py-1 text-sm bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 rounded-md hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
-              >
-                ⭐ Init Popular Tokens
-              </button>
-              
-              <button
-                onClick={() => handleQuickAction('fetch-jobs')}
-                className="px-3 py-1 text-sm bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded-md hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-              >
-                📋 Fetch Jobs
-              </button>
-              
+            {/* Controls */}
+            <div className="flex justify-between items-center">
               <button
                 onClick={() => setShowDebugInfo(!showDebugInfo)}
-                className="px-3 py-1 text-sm bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="text-sm text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
               >
-                🐛 {showDebugInfo ? 'Hide' : 'Show'} Debug
+                🔍 {showDebugInfo ? 'Hide' : 'Show'} Debug
               </button>
             </div>
 
@@ -250,29 +187,84 @@ export const EthIndexerDashboard = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* Active Jobs */}
+          {/* Jobs Section - IMPROVED */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-            Active Jobs ({jobs.length + recentlyCreatedJobs.length})
-          </h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                📊 Jobs Overview
+              </h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={refreshJobs}
+                  className="text-sm px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                  title="Refresh jobs from API"
+                >
+                  🔄 Refresh
+                </button>
+                <button
+                  onClick={() => setShowCompletedJobs(!showCompletedJobs)}
+                  className="text-sm px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  {showCompletedJobs ? 'Hide Completed' : 'Show All'}
+                </button>
+              </div>
+            </div>
+
+            {/* Job Statistics */}
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+                  {activeJobsCount}
+                </div>
+                <div className="text-sm text-blue-800 dark:text-blue-300">
+                  Active Jobs
+                </div>
+              </div>
+              <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  {completedJobsCount}
+                </div>
+                <div className="text-sm text-green-800 dark:text-green-300">
+                  Completed
+                </div>
+              </div>
+              <div className="text-center p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <div className="text-2xl font-bold text-gray-600 dark:text-gray-400">
+                  {totalJobsCount}
+                </div>
+                <div className="text-sm text-gray-800 dark:text-gray-300">
+                  Total Jobs
+                </div>
+              </div>
+            </div>
             
+            {/* Jobs List */}
             <div className="space-y-4 max-h-96 overflow-y-auto">
-              {jobs.length === 0 ? (
+              {displayJobs.length === 0 ? (
                 <div className="text-center py-12">
                   <div className="text-6xl mb-4">🏗️</div>
-                  <p className="text-gray-500 dark:text-gray-400">No active jobs</p>
+                  <p className="text-gray-500 dark:text-gray-400">
+                    {showCompletedJobs ? 'No jobs yet' : 'No active jobs'}
+                  </p>
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
                     Create a job using the query builder above
                   </p>
                 </div>
               ) : (
-                jobs.map((job) => (
+                displayJobs.map((job, index) => (
                   <div key={job.jobId} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <h4 className="font-medium text-gray-900 dark:text-white">
-                          Job: {job.jobId.slice(0, 8)}...
-                        </h4>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-medium text-gray-900 dark:text-white">
+                            Job: {job.jobId.slice(0, 8)}...
+                          </h4>
+                          {job.isLocal && (
+                            <span className="px-2 py-1 text-xs bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200 rounded">
+                              Local
+                            </span>
+                          )}
+                        </div>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                           {job.message}
                         </p>
@@ -281,14 +273,27 @@ export const EthIndexerDashboard = () => {
                         </p>
                       </div>
                       
-                      <div className={`px-3 py-1 rounded-full text-xs font-medium ${
-                        job.status === 'completed' 
-                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                          : job.status === 'error'
-                          ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
-                      }`}>
-                        {job.progress}%
+                      <div className="flex items-center gap-2">
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          job.status === 'completed' 
+                            ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                            : job.status === 'error'
+                            ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                        }`}>
+                          {job.progress}%
+                        </div>
+                        
+                        {/* Remove button for completed jobs */}
+                        {job.status === 'completed' && (
+                          <button
+                            onClick={() => removeJob(job.jobId)}
+                            className="text-gray-400 hover:text-red-600 text-xs"
+                            title="Remove job"
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                     </div>
                     
@@ -307,7 +312,7 @@ export const EthIndexerDashboard = () => {
                               : 'bg-blue-500'
                           }`}
                           style={{ width: `${job.progress}%` }}
-                        />
+                        ></div>
                       </div>
                     </div>
                   </div>
@@ -319,41 +324,39 @@ export const EthIndexerDashboard = () => {
           {/* Recent Transfers */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
-              Recent Transfers ({transfers.length})
+              💰 Recent Transfers ({transfers.length})
             </h2>
             
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {transfers.length === 0 ? (
                 <div className="text-center py-12">
-                  <div className="text-6xl mb-4">💰</div>
-                  <p className="text-gray-500 dark:text-gray-400">No recent transfers</p>
+                  <div className="text-6xl mb-4">📊</div>
+                  <p className="text-gray-500 dark:text-gray-400">No transfers yet</p>
                   <p className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                    Transfers will appear here as jobs index blockchain data
+                    Start indexing to see real-time transfer data
                   </p>
                 </div>
               ) : (
                 transfers.map((transfer) => (
                   <div key={transfer.id} className="border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-                    <div className="flex justify-between items-start">
-                      <div className="space-y-1 flex-1">
-                        <h4 className="font-medium text-sm text-gray-900 dark:text-white">
-                          {transfer.value} {transfer.token.symbol || 'tokens'}
-                        </h4>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          From: {transfer.from.slice(0, 10)}...
-                        </p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400">
-                          To: {transfer.to.slice(0, 10)}...
-                        </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-500">
-                          Tx: {transfer.txHash.slice(0, 10)}...
-                        </p>
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center space-x-2">
+                        <span className="font-mono text-sm bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                          {transfer.token?.symbol || 'TOKEN'}
+                        </span>
+                        <span className="text-sm font-medium">
+                          {parseFloat(transfer.value).toLocaleString()}
+                        </span>
                       </div>
-                      
-                      <div className="text-xs text-gray-500 dark:text-gray-500 text-right">
-                        <p>Block: {transfer.blockNumber}</p>
-                        <p>{new Date(transfer.timestamp).toLocaleTimeString()}</p>
-                      </div>
+                      <span className="text-xs text-gray-500">
+                        Block {transfer.blockNumber}
+                      </span>
+                    </div>
+                    
+                    <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                      <div>From: {transfer.from.slice(0, 8)}...{transfer.from.slice(-6)}</div>
+                      <div>To: {transfer.to.slice(0, 8)}...{transfer.to.slice(-6)}</div>
+                      <div>Tx: {transfer.txHash.slice(0, 12)}...</div>
                     </div>
                   </div>
                 ))
@@ -362,20 +365,57 @@ export const EthIndexerDashboard = () => {
           </div>
         </div>
 
-        {/* Debug Information */}
+        {/* Debug Panel */}
         {showDebugInfo && (
           <div className="mt-8 bg-gray-900 text-green-400 rounded-xl p-6 font-mono text-sm">
-            <h3 className="text-lg font-bold text-white mb-4">🐛 Debug Information</h3>
+            <h3 className="text-white font-bold mb-4">🔍 Debug Information</h3>
+            <div className="mb-4 p-3 bg-red-900/20 border border-red-500 rounded">
+              <p className="text-red-400 font-bold">⚠️ WebSocket Issue Detected:</p>
+              <p className="text-red-300">• system-status events: ✅ Working</p>
+              <p className="text-red-300">• job-progress-global events: ❌ Check backend logs</p>
+              <p className="text-yellow-300">→ Using API polling as fallback (every 3s)</p>
+              <p className="text-blue-300">• Backend jobs API: ✅ Working ({totalJobsCount} jobs loaded)</p>
+            </div>
             <div className="space-y-1 max-h-64 overflow-y-auto">
               {debugInfo.length === 0 ? (
-                <p className="text-gray-500">No debug information available</p>
+                <p className="text-gray-500">No debug information yet...</p>
               ) : (
                 debugInfo.map((info, index) => (
-                  <div key={index} className="text-xs">
+                  <div key={index} className={`${
+                    info.includes('RECEIVED job-progress-global') ? 'text-green-400 font-bold' :
+                    info.includes('job-progress-global') ? 'text-red-400' :
+                    info.includes('System:') ? 'text-green-400' :
+                    info.includes('API') || info.includes('Loaded') || info.includes('Refreshed') ? 'text-blue-400' :
+                    info.includes('WebSocket event:') ? 'text-yellow-400' :
+                    'text-green-400'
+                  }`}>
                     {info}
                   </div>
                 ))
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Backend Stats */}
+        {backendStats && (
+          <div className="mt-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+              ⚡ System Status
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-medium text-gray-900 dark:text-white mb-2">Health Check</h4>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Status: <span className="text-green-600 font-medium">{backendStats.health?.status || 'Unknown'}</span>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-medium text-gray-900 dark:text-white mb-2">Indexer Stats</h4>
+                <div className="text-sm text-gray-600 dark:text-gray-400">
+                  Current Block: <span className="font-mono">{backendStats.indexerStats?.currentBlock || 'N/A'}</span>
+                </div>
+              </div>
             </div>
           </div>
         )}

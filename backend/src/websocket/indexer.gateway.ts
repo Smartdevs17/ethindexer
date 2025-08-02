@@ -149,6 +149,10 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
     // Also emit to all clients for global updates
     this.server.emit('job-progress-global', data);
     
+    // ENHANCED LOGGING
+    this.logger.log(`📡 EMITTED job-progress-global: ${data.jobId.slice(0, 8)}... - ${data.progress}% - ${data.message}`);
+    this.logger.log(`👥 Connected clients: ${this.connectedClients.size}`);
+    this.logger.log(`🏠 Room ${room} clients: ${this.server.sockets.adapter.rooms.get(room)?.size || 0}`);
     this.logger.log(`📊 Job progress: ${data.jobId} - ${data.progress}%`);
   }
 
@@ -173,6 +177,7 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
    */
   emitSystemStatus(data: SystemStatusEvent) {
     this.server.emit('system-status', data);
+    this.logger.log(`📢 EMITTED system-status: ${data.stage} - ${data.message}`);
     this.logger.log(`🚀 System: ${data.message}`);
   }
 
