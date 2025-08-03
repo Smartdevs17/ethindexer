@@ -7,7 +7,8 @@ import { WebsocketModule } from './websocket/websocket.module';
 import { DatabaseModule } from './database/database.module';
 import { AppController } from './app.controller';
 import { IndexingOrchestratorModule } from './indexing-orchestrator/indexing-orchestrator.module';
-import { OrchestratorModule } from './orchestrator/orchestrator.module'; // Add this
+import { OrchestratorModule } from './orchestrator/orchestrator.module';
+import { ChatModule } from './chat/chat.module';
 
 
 @Module({
@@ -22,6 +23,7 @@ import { OrchestratorModule } from './orchestrator/orchestrator.module'; // Add 
     WebsocketModule,
     IndexingOrchestratorModule,
     OrchestratorModule,
+    ChatModule,
     
   ],
   controllers: [AppController],
