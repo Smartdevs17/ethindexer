@@ -1,13 +1,6 @@
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Body, Logger } from '@nestjs/common';
 import { ChatService } from './chat.service';
-
-interface ChatRequest {
-  message: string;
-  conversationHistory?: Array<{
-    role: 'user' | 'assistant';
-    content: string;
-  }>;
-}
+import { ChatRequestDto, ChatApiResponseDto } from './dto/chat.dto';
 
 @Controller('chat')
 export class ChatController {
@@ -20,18 +13,19 @@ export class ChatController {
    * POST /chat/message
    */
   @Post('message')
-  async processMessage(@Body() body: ChatRequest) {
+  async processMessage(@Body() body: ChatRequestDto): Promise<ChatApiResponseDto> {
     const { message, conversationHistory = [] } = body;
 
     if (!message?.trim()) {
+      this.logger.warn('Empty message received');
       return {
         success: false,
-        error: 'Message is required',
+        error: 'Message is required and cannot be empty',
         timestamp: new Date()
       };
     }
 
-    this.logger.log(`📨 Processing chat message: "${message}"`);
+    this.logger.log(`📨 Processing chat message: "${message.substring(0, 50)}..."`);
 
     try {
       const response = await this.chatService.processConversation(
@@ -39,7 +33,7 @@ export class ChatController {
         conversationHistory
       );
 
-      this.logger.log(`🤖 Chat response ready: ${response.isQueryReady ? 'READY' : 'NEEDS_MORE_INFO'}`);
+      this.logger.log(`🤖 Chat response: ${response.isQueryReady ? 'READY' : 'NEEDS_MORE_INFO'} (confidence: ${response.confidence})`);
 
       return {
         success: true,
@@ -66,33 +60,38 @@ export class ChatController {
 
   /**
    * Get conversation suggestions
-   * POST /chat/suggestions
+   * GET /chat/suggestions
    */
-  @Post('suggestions')
-  async getSuggestions(@Body() body: { context?: string }) {
-    const suggestions = [
-      "Index USDC transfers from the latest 1000 blocks",
-      "Track WETH transfers for a specific address",
-      "Monitor USDT transfers above $10,000",
-      "Index all transfers from block 18000000 to 18001000",
-      "Track transfers for address 0x742d35cc44b75c42b4b6c5a8b964b08d2a6f6c42"
-    ];
-
-    return {
-      success: true,
-      suggestions,
-      timestamp: new Date()
-    };
+  @Get('suggestions')
+  async getSuggestions() {
+    try {
+      const suggestions = await this.chatService.getChatSuggestions();
+      
+      return {
+        success: true,
+        suggestions,
+        timestamp: new Date()
+      };
+    } catch (error) {
+      this.logger.error('Failed to get suggestions:', error);
+      
+      return {
+        success: false,
+        error: 'Failed to get suggestions',
+        suggestions: [],
+        timestamp: new Date()
+      };
+    }
   }
 
   /**
    * Health check for chat service
    * GET /chat/health
    */
-  @Post('health')
+  @Get('health')
   async healthCheck() {
     try {
-      // Simple test to verify OpenAI connectivity
+      // Test with a simple message
       const testResponse = await this.chatService.processConversation(
         "test message",
         []
@@ -101,7 +100,12 @@ export class ChatController {
       return {
         success: true,
         status: 'healthy',
-        aiService: 'connected',
+        service: 'chat',
+        test: {
+          input: 'test message',
+          isQueryReady: testResponse.isQueryReady,
+          confidence: testResponse.confidence
+        },
         timestamp: new Date()
       };
     } catch (error) {
@@ -110,7 +114,7 @@ export class ChatController {
       return {
         success: false,
         status: 'unhealthy',
-        aiService: 'disconnected',
+        service: 'chat',
         error: error instanceof Error ? error.message : 'Unknown error',
         timestamp: new Date()
       };

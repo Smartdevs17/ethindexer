@@ -1,195 +1,245 @@
-import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import OpenAI from 'openai';
-
-export interface ChatResponse {
-  message: string;
-  isQueryReady: boolean;
-  suggestedQuery?: string;
-  needsMoreInfo?: string[];
-  confidence: number;
-}
+import { Injectable, Logger } from '@nestjs/common';
+import { AiService } from '../ai/ai.service';
+import { ChatMessageDto, ChatResponseDto } from './dto/chat.dto';
 
 @Injectable()
 export class ChatService {
-  private openai: OpenAI;
+  private readonly logger = new Logger(ChatService.name);
 
-  constructor(private configService: ConfigService) {
-    this.openai = new OpenAI({
-      apiKey: this.configService.get<string>('OPENAI_API_KEY'),
-    });
-  }
+  constructor(private readonly aiService: AiService) {}
 
+  /**
+   * Process a conversational message and determine next action
+   */
   async processConversation(
-    userMessage: string, 
-    conversationHistory: Array<{role: 'user' | 'assistant', content: string}> = []
-  ): Promise<ChatResponse> {
-    
-    const systemPrompt = `You are EthIndexer AI, a friendly assistant that helps users index blockchain data using natural language.
-
-Your role is to:
-1. Guide users to create clear, actionable indexing queries
-2. Ask clarifying questions when needed
-3. Confirm when a query is ready to execute
-4. Be conversational and helpful
-
-Guidelines:
-- Keep responses concise and friendly
-- Ask ONE clarifying question at a time
-- Focus on: token/address, block range, specific conditions
-- Common tokens: USDC, USDT, WETH, or specific contract addresses
-- Block ranges: "latest 1000 blocks", "from block X to Y", "ongoing monitoring"
-
-Response format:
-- If query is ready to execute: Confirm and set isQueryReady=true
-- If needs clarification: Ask one specific question and set isQueryReady=false
-- Always be helpful and encouraging
-
-Examples of ready queries:
-- "Index USDC transfers from the latest 1000 blocks"
-- "Track WETH transfers for address 0x123..."
-- "Monitor USDT transfers from block 18000000"
-
-Current conversation context: The user wants to index blockchain data.`;
+    userMessage: string,
+    conversationHistory: ChatMessageDto[] = []
+  ): Promise<ChatResponseDto> {
+    this.logger.log(`💬 Processing chat: "${userMessage}"`);
 
     try {
-      const messages = [
-        { role: 'system' as const, content: systemPrompt },
-        ...conversationHistory,
-        { role: 'user' as const, content: userMessage }
-      ];
-
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages,
-        temperature: 0.7,
-        max_tokens: 300,
-        functions: [
-          {
-            name: 'analyze_query_readiness',
-            description: 'Analyze if the user query is ready to execute as an indexing job',
-            parameters: {
-              type: 'object',
-              properties: {
-                isQueryReady: {
-                  type: 'boolean',
-                  description: 'True if the query contains enough information to create an indexing job'
-                },
-                confidence: {
-                  type: 'number',
-                  description: 'Confidence level 0-1 that this assessment is correct'
-                },
-                suggestedQuery: {
-                  type: 'string',
-                  description: 'If ready, the exact query string to execute'
-                },
-                needsMoreInfo: {
-                  type: 'array',
-                  items: { type: 'string' },
-                  description: 'List of missing information needed if not ready'
-                }
-              },
-              required: ['isQueryReady', 'confidence']
-            }
+      // Analyze the user's message using simple heuristics
+      const analysis = this.analyzeUserMessage(userMessage, conversationHistory);
+      
+      if (analysis.isQueryReady) {
+        // Message is ready to be executed - prepare it for the orchestrator
+        this.logger.log(`✅ Query ready for execution: "${userMessage}"`);
+        
+        return {
+          message: analysis.response,
+          isQueryReady: true,
+          suggestedQuery: userMessage,
+          confidence: analysis.confidence,
+          conversationContext: {
+            totalMessages: conversationHistory.length + 1,
+            lastUserMessage: userMessage
           }
-        ],
-        function_call: { name: 'analyze_query_readiness' }
-      });
-
-      const assistantMessage = response.choices[0].message.content || 
-        "I'd be happy to help you index blockchain data! What would you like to track?";
-
-      let analysis = {
-        isQueryReady: false,
-        confidence: 0.5,
-        suggestedQuery: undefined,
-        needsMoreInfo: []
-      };
-
-      // Parse function call if present
-      if (response.choices[0].message.function_call) {
-        try {
-          analysis = JSON.parse(response.choices[0].message.function_call.arguments);
-        } catch (e) {
-          console.warn('Failed to parse function call arguments:', e);
-        }
+        };
+      } else {
+        // Message needs more information - guide the user
+        this.logger.log(`🤔 Query needs more info: ${analysis.needsMoreInfo?.join(', ')}`);
+        
+        return {
+          message: analysis.response,
+          isQueryReady: false,
+          needsMoreInfo: analysis.needsMoreInfo,
+          confidence: analysis.confidence,
+          conversationContext: {
+            totalMessages: conversationHistory.length + 1,
+            lastUserMessage: userMessage
+          }
+        };
       }
-
-      // Fallback analysis using simple heuristics
-      if (!response.choices[0].message.function_call) {
-        analysis = this.analyzeQueryHeuristics(userMessage);
-      }
-
-      return {
-        message: assistantMessage,
-        isQueryReady: analysis.isQueryReady,
-        suggestedQuery: analysis.suggestedQuery,
-        needsMoreInfo: analysis.needsMoreInfo,
-        confidence: analysis.confidence
-      };
-
     } catch (error) {
-      console.error('Chat service error:', error);
+      this.logger.error('❌ Chat processing failed:', error);
       
-      // Fallback to heuristic analysis
-      const fallbackAnalysis = this.analyzeQueryHeuristics(userMessage);
-      
+      // Fallback response
       return {
-        message: "I'm here to help you index blockchain data! What would you like to track?",
-        isQueryReady: fallbackAnalysis.isQueryReady,
-        suggestedQuery: fallbackAnalysis.suggestedQuery,
-        needsMoreInfo: fallbackAnalysis.needsMoreInfo || ['token or address', 'block range'],
-        confidence: 0.3
+        message: "I'm having trouble processing your request. Could you try rephrasing what you'd like to index?",
+        isQueryReady: false,
+        needsMoreInfo: ['clarification'],
+        confidence: 0.1,
+        conversationContext: {
+          totalMessages: conversationHistory.length + 1,
+          lastUserMessage: userMessage
+        }
       };
     }
-  }
-
-  private analyzeQueryHeuristics(input: string): {
-    isQueryReady: boolean;
-    confidence: number;
-    suggestedQuery: string;
-    needsMoreInfo: string[];
-  } {
-    const lowerInput = input.toLowerCase();
-    
-    // Check for essential components
-    const hasToken = /usdc|usdt|weth|ethereum|0x[a-f0-9]{40}/i.test(input);
-    const hasAction = /index|track|monitor|get|find/i.test(input);
-    const hasBlockInfo = /block|from|to|latest|\d+/i.test(input);
-    
-    // Calculate readiness score
-    const readinessScore = (hasToken ? 0.4 : 0) + (hasAction ? 0.3 : 0) + (hasBlockInfo ? 0.3 : 0);
-    const isReady = readinessScore >= 0.7;
-    
-    const missing = [];
-    if (!hasToken) missing.push('token or contract address');
-    if (!hasAction) missing.push('action to perform');
-    if (!hasBlockInfo) missing.push('block range');
-    
-    return {
-      isQueryReady: isReady,
-      confidence: readinessScore,
-      suggestedQuery: isReady ? input : '',
-      needsMoreInfo: missing
-    };
   }
 
   /**
-   * Generate contextual follow-up questions
+   * Analyze user message to determine if it's ready to execute
    */
-  generateFollowUpQuestion(needsMoreInfo: string[]): string {
-    if (needsMoreInfo.includes('token or contract address')) {
-      return "Which token would you like to track? For example: USDC, USDT, WETH, or a specific contract address (0x...).";
+  private analyzeUserMessage(
+    message: string, 
+    history: ChatMessageDto[]
+  ): {
+    isQueryReady: boolean;
+    response: string;
+    confidence: number;
+    needsMoreInfo?: string[];
+  } {
+    const lowerMessage = message.toLowerCase();
+    
+    // Check for essential components
+    const hasToken = this.hasTokenReference(lowerMessage);
+    const hasAction = this.hasActionWord(lowerMessage);
+    const hasBlockInfo = this.hasBlockReference(lowerMessage);
+    
+    // Calculate confidence based on components present
+    let confidence = 0;
+    const components = [];
+    
+    if (hasToken) {
+      confidence += 0.4;
+      components.push('token');
+    }
+    if (hasAction) {
+      confidence += 0.3;
+      components.push('action');
+    }
+    if (hasBlockInfo) {
+      confidence += 0.3;
+      components.push('block_info');
     }
     
-    if (needsMoreInfo.includes('block range')) {
-      return "What block range should I index? For example: 'latest 1000 blocks', 'from block 18000000', or 'ongoing monitoring'.";
+    // Consider conversation context
+    if (history.length > 0) {
+      confidence += 0.1; // Slight boost for ongoing conversation
     }
     
-    if (needsMoreInfo.includes('action to perform')) {
-      return "What would you like me to do? For example: 'index transfers', 'track all activity', or 'monitor for specific conditions'.";
+    const isReady = confidence >= 0.7;
+    const missing = this.identifyMissingComponents(hasToken, hasAction, hasBlockInfo);
+    
+    if (isReady) {
+      return {
+        isQueryReady: true,
+        response: `Perfect! I'll index ${this.describeQuery(message)} for you. Creating the indexing job now...`,
+        confidence
+      };
+    } else {
+      return {
+        isQueryReady: false,
+        response: this.generateGuidanceMessage(missing, history),
+        confidence,
+        needsMoreInfo: missing
+      };
+    }
+  }
+
+  /**
+   * Check if message contains token/contract references
+   */
+  private hasTokenReference(message: string): boolean {
+    const tokenPatterns = [
+      /\busdc\b/i,
+      /\busdt\b/i, 
+      /\bweth\b/i,
+      /\bethereum\b/i,
+      /\btoken\b/i,
+      /0x[a-f0-9]{40}/i // Contract address pattern
+    ];
+    
+    return tokenPatterns.some(pattern => pattern.test(message));
+  }
+
+  /**
+   * Check if message contains action words
+   */
+  private hasActionWord(message: string): boolean {
+    const actionPatterns = [
+      /\bindex\b/i,
+      /\btrack\b/i,
+      /\bmonitor\b/i,
+      /\bget\b/i,
+      /\bfind\b/i,
+      /\bcollect\b/i,
+      /\bgather\b/i
+    ];
+    
+    return actionPatterns.some(pattern => pattern.test(message));
+  }
+
+  /**
+   * Check if message contains block/range information
+   */
+  private hasBlockReference(message: string): boolean {
+    const blockPatterns = [
+      /\bblock\b/i,
+      /\bfrom\b.*\bto\b/i,
+      /\blatest\b/i,
+      /\brecent\b/i,
+      /\d{7,}/i // Large numbers (likely block numbers)
+    ];
+    
+    return blockPatterns.some(pattern => pattern.test(message));
+  }
+
+  /**
+   * Identify what components are missing
+   */
+  private identifyMissingComponents(
+    hasToken: boolean,
+    hasAction: boolean, 
+    hasBlock: boolean
+  ): string[] {
+    const missing = [];
+    
+    if (!hasToken) missing.push('token_or_address');
+    if (!hasAction) missing.push('action');
+    if (!hasBlock) missing.push('block_range');
+    
+    return missing;
+  }
+
+  /**
+   * Generate helpful guidance message based on what's missing
+   */
+  private generateGuidanceMessage(
+    missing: string[],
+    history: ChatMessageDto[]
+  ): string {
+    if (missing.includes('token_or_address')) {
+      return "Which token would you like to track? For example:\n\n• USDC transfers\n• USDT transfers  \n• WETH transfers\n• Or provide a contract address (0x...)";
     }
     
-    return "Could you provide more details about what you'd like to index?";
+    if (missing.includes('action')) {
+      return "What would you like me to do? For example:\n\n• Index all transfers\n• Track transfers for a specific address\n• Monitor transfers above a certain value";
+    }
+    
+    if (missing.includes('block_range')) {
+      return "What block range should I index? For example:\n\n• From the latest 1000 blocks\n• From block 18000000 to latest\n• Just say 'latest' for ongoing monitoring";
+    }
+    
+    // Generic fallback
+    return "I'd be happy to help you index blockchain data! Could you tell me more about what you'd like to track?";
+  }
+
+  /**
+   * Describe the query in friendly terms
+   */
+  private describeQuery(message: string): string {
+    const lower = message.toLowerCase();
+    
+    if (lower.includes('usdc')) return 'USDC transfers';
+    if (lower.includes('usdt')) return 'USDT transfers';
+    if (lower.includes('weth')) return 'WETH transfers';
+    if (lower.includes('0x')) return 'transfers for that contract';
+    
+    return 'the blockchain data you specified';
+  }
+
+  /**
+   * Get chat suggestions for the user
+   */
+  async getChatSuggestions(context?: string): Promise<string[]> {
+    const suggestions = [
+      "Index USDC transfers from the latest 1000 blocks",
+      "Track WETH transfers for a specific address", 
+      "Monitor USDT transfers above $10,000",
+      "Index all transfers from block 18000000 to 18001000"
+    ];
+
+    return suggestions;
   }
 }
