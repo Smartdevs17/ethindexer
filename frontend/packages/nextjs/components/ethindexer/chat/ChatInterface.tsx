@@ -80,17 +80,33 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         // Execute the query
         try {
           const result = await onExecuteQuery(content);
+          console.log('📊 Full result from onExecuteQuery:', result);
           
-          // Add success message
-          addMessage({
-            type: 'system',
-            content: `✅ Successfully created indexing job! Job ID: ${result.jobId}`,
-            metadata: {
-              jobId: result.jobId,
-              config: result.config
-            }
-          });
+          // FIXED: Handle the nested response structure from your backend
+          // Backend returns: { success: true, result: { jobId: "...", status: "...", config: {...} } }
+          const jobData = result.result || result; // Handle both nested and direct structures
+          const jobId = jobData.jobId;
+          const config = jobData.config;
+          
+          if (jobId) {
+            // Add success message
+            addMessage({
+              type: 'system',
+              content: `✅ Successfully created indexing job! Job ID: ${jobId}`,
+              metadata: {
+                jobId: jobId,
+                config: config
+              }
+            });
+          } else {
+            console.warn('⚠️ No jobId found in result:', result);
+            addMessage({
+              type: 'system',
+              content: `✅ Job created successfully! Check the Jobs panel for updates.`
+            });
+          }
         } catch (error) {
+          console.error('❌ Job creation error:', error);
           addMessage({
             type: 'system',
             content: `❌ Error creating job: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -104,6 +120,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         });
       }
     } catch (error) {
+      console.error('❌ Chat analysis error:', error);
       addMessage({
         type: 'assistant',
         content: "I apologize, but I'm having trouble understanding your request. Could you please rephrase it?"
