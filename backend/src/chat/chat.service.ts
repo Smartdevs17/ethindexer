@@ -18,17 +18,17 @@ export class ChatService {
     this.logger.log(`💬 Processing chat: "${userMessage}"`);
 
     try {
-      // Analyze the user's message using simple heuristics
-      const analysis = this.analyzeUserMessage(userMessage, conversationHistory);
+      // Analyze the user's message WITH conversation context
+      const analysis = this.analyzeWithConversationContext(userMessage, conversationHistory);
       
       if (analysis.isQueryReady) {
         // Message is ready to be executed - prepare it for the orchestrator
-        this.logger.log(`✅ Query ready for execution: "${userMessage}"`);
+        this.logger.log(`✅ Query ready for execution: "${analysis.combinedQuery}"`);
         
         return {
           message: analysis.response,
           isQueryReady: true,
-          suggestedQuery: userMessage,
+          suggestedQuery: analysis.combinedQuery,
           confidence: analysis.confidence,
           conversationContext: {
             totalMessages: conversationHistory.length + 1,
@@ -68,9 +68,9 @@ export class ChatService {
   }
 
   /**
-   * Analyze user message to determine if it's ready to execute
+   * Analyze user message WITH conversation context
    */
-  private analyzeUserMessage(
+  private analyzeWithConversationContext(
     message: string, 
     history: ChatMessageDto[]
   ): {
@@ -78,35 +78,29 @@ export class ChatService {
     response: string;
     confidence: number;
     needsMoreInfo?: string[];
+    combinedQuery?: string;
   } {
-    const lowerMessage = message.toLowerCase();
+    // Combine current message with recent conversation context
+    const contextualInfo = this.extractConversationContext(message, history);
+    const combinedQuery = this.buildCombinedQuery(contextualInfo);
     
-    // Check for essential components
-    const hasToken = this.hasTokenReference(lowerMessage);
-    const hasAction = this.hasActionWord(lowerMessage);
-    const hasBlockInfo = this.hasBlockReference(lowerMessage);
+    this.logger.log(`🧠 Contextual analysis: ${JSON.stringify(contextualInfo)}`);
+    this.logger.log(`🔗 Combined query: "${combinedQuery}"`);
+    
+    // Analyze the combined query
+    const hasToken = this.hasTokenReference(combinedQuery) || contextualInfo.hasToken;
+    const hasAction = this.hasActionWord(combinedQuery) || contextualInfo.hasAction;
+    const hasBlockInfo = this.hasBlockReference(combinedQuery) || contextualInfo.hasBlock;
     
     // Calculate confidence based on components present
     let confidence = 0;
-    const components = [];
     
-    if (hasToken) {
-      confidence += 0.4;
-      components.push('token');
-    }
-    if (hasAction) {
-      confidence += 0.3;
-      components.push('action');
-    }
-    if (hasBlockInfo) {
-      confidence += 0.3;
-      components.push('block_info');
-    }
+    if (hasToken) confidence += 0.4;
+    if (hasAction) confidence += 0.4; // Increased weight for actions
+    if (hasBlockInfo) confidence += 0.2;
     
-    // Consider conversation context
-    if (history.length > 0) {
-      confidence += 0.1; // Slight boost for ongoing conversation
-    }
+    // Bonus for conversation flow
+    if (history.length > 0) confidence += 0.1;
     
     const isReady = confidence >= 0.7;
     const missing = this.identifyMissingComponents(hasToken, hasAction, hasBlockInfo);
@@ -114,17 +108,84 @@ export class ChatService {
     if (isReady) {
       return {
         isQueryReady: true,
-        response: `Perfect! I'll index ${this.describeQuery(message)} for you. Creating the indexing job now...`,
-        confidence
+        response: `Perfect! I'll ${this.describeAction(combinedQuery, contextualInfo)}. Creating the indexing job now...`,
+        confidence,
+        combinedQuery
       };
     } else {
       return {
         isQueryReady: false,
-        response: this.generateGuidanceMessage(missing, history),
+        response: this.generateContextualGuidanceMessage(missing, contextualInfo, history),
         confidence,
         needsMoreInfo: missing
       };
     }
+  }
+
+  /**
+   * Extract meaningful information from conversation context
+   */
+  private extractConversationContext(currentMessage: string, history: ChatMessageDto[]) {
+    const allMessages = [...history.map(h => h.content), currentMessage];
+    const combinedText = allMessages.join(' ').toLowerCase();
+    
+    // Extract tokens mentioned in conversation
+    const tokens = [];
+    if (/\busdc\b/i.test(combinedText)) tokens.push('USDC');
+    if (/\busdt\b/i.test(combinedText)) tokens.push('USDT');
+    if (/\bweth\b/i.test(combinedText)) tokens.push('WETH');
+    
+    // Extract contract addresses
+    const contractMatch = combinedText.match(/0x[a-f0-9]{40}/i);
+    if (contractMatch) tokens.push(contractMatch[0]);
+    
+    // Extract actions
+    const actions = [];
+    if (/\bindex\b/i.test(combinedText)) actions.push('index');
+    if (/\btrack\b/i.test(combinedText)) actions.push('track');
+    if (/\bmonitor\b/i.test(combinedText)) actions.push('monitor');
+    if (/\ball transfers\b/i.test(combinedText)) actions.push('index all transfers'); // FIX: Recognize "all transfers"
+    
+    // Extract block information
+    const blockInfo = [];
+    const blockMatch = combinedText.match(/\d{7,}/);
+    if (blockMatch) blockInfo.push(`block ${blockMatch[0]}`);
+    if (/\blatest\b/i.test(combinedText)) blockInfo.push('latest blocks');
+    if (/\brecent\b/i.test(combinedText)) blockInfo.push('recent blocks');
+    
+    return {
+      tokens,
+      actions,
+      blockInfo,
+      hasToken: tokens.length > 0,
+      hasAction: actions.length > 0,
+      hasBlock: blockInfo.length > 0,
+      allText: combinedText
+    };
+  }
+
+  /**
+   * Build a combined query from conversation context
+   */
+  private buildCombinedQuery(contextInfo: any): string {
+    const parts = [];
+    
+    // Add action
+    if (contextInfo.actions.length > 0) {
+      parts.push(contextInfo.actions[0]);
+    }
+    
+    // Add token
+    if (contextInfo.tokens.length > 0) {
+      parts.push(`${contextInfo.tokens[0]} transfers`);
+    }
+    
+    // Add block info
+    if (contextInfo.blockInfo.length > 0) {
+      parts.push(`from ${contextInfo.blockInfo[0]}`);
+    }
+    
+    return parts.join(' ');
   }
 
   /**
@@ -154,7 +215,8 @@ export class ChatService {
       /\bget\b/i,
       /\bfind\b/i,
       /\bcollect\b/i,
-      /\bgather\b/i
+      /\bgather\b/i,
+      /\ball transfers\b/i // FIX: Add "all transfers" as valid action
     ];
     
     return actionPatterns.some(pattern => pattern.test(message));
@@ -193,22 +255,31 @@ export class ChatService {
   }
 
   /**
-   * Generate helpful guidance message based on what's missing
+   * Generate contextual guidance message based on what's missing and conversation state
    */
-  private generateGuidanceMessage(
+  private generateContextualGuidanceMessage(
     missing: string[],
+    contextInfo: any,
     history: ChatMessageDto[]
   ): string {
+    // If we're missing multiple things but this is the first message, ask for the most important
+    if (missing.includes('token_or_address') && missing.includes('action')) {
+      return "I'd be happy to help you index blockchain data! What would you like to do? For example:\n\n• Index USDC transfers\n• Track WETH transfers\n• Monitor USDT transfers";
+    }
+    
     if (missing.includes('token_or_address')) {
       return "Which token would you like to track? For example:\n\n• USDC transfers\n• USDT transfers  \n• WETH transfers\n• Or provide a contract address (0x...)";
     }
     
     if (missing.includes('action')) {
-      return "What would you like me to do? For example:\n\n• Index all transfers\n• Track transfers for a specific address\n• Monitor transfers above a certain value";
+      const tokenText = contextInfo.tokens.length > 0 ? ` ${contextInfo.tokens[0]}` : '';
+      return `What would you like me to do with${tokenText} transfers? For example:\n\n• Index all transfers\n• Track transfers for a specific address\n• Monitor transfers above a certain value`;
     }
     
     if (missing.includes('block_range')) {
-      return "What block range should I index? For example:\n\n• From the latest 1000 blocks\n• From block 18000000 to latest\n• Just say 'latest' for ongoing monitoring";
+      const actionText = contextInfo.actions.length > 0 ? contextInfo.actions[0] : 'index';
+      const tokenText = contextInfo.tokens.length > 0 ? ` ${contextInfo.tokens[0]}` : '';
+      return `What block range should I ${actionText}${tokenText} transfers from? For example:\n\n• From the latest 1000 blocks\n• From block 18000000 to latest\n• Just say 'latest' for ongoing monitoring`;
     }
     
     // Generic fallback
@@ -216,17 +287,14 @@ export class ChatService {
   }
 
   /**
-   * Describe the query in friendly terms
+   * Describe the action in friendly terms
    */
-  private describeQuery(message: string): string {
-    const lower = message.toLowerCase();
+  private describeAction(combinedQuery: string, contextInfo: any): string {
+    const action = contextInfo.actions[0] || 'index';
+    const token = contextInfo.tokens[0] || 'token';
+    const block = contextInfo.blockInfo[0] || 'specified blocks';
     
-    if (lower.includes('usdc')) return 'USDC transfers';
-    if (lower.includes('usdt')) return 'USDT transfers';
-    if (lower.includes('weth')) return 'WETH transfers';
-    if (lower.includes('0x')) return 'transfers for that contract';
-    
-    return 'the blockchain data you specified';
+    return `${action} ${token} transfers from ${block}`;
   }
 
   /**
