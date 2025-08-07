@@ -30,7 +30,7 @@
     "@nestjs/core": "^10.4.20",
     "@nestjs/platform-express": "^10.4.20",
     "@nestjs/platform-socket.io": "^10.4.20",
-    "@nestjs/swagger": "^10.4.20",
+    "@nestjs/swagger": "^8.1.1",
     "@nestjs/websockets": "^10.4.20",
     "@prisma/client": "^6.12.0",
     "class-transformer": "^0.5.1",
