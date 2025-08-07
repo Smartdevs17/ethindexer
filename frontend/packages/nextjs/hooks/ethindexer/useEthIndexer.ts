@@ -558,7 +558,7 @@ export const useEthIndexer = () => {
   }, []);
 
   // API base URL
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   // Create a new indexing job
   const createJob = async (query: string) => {
