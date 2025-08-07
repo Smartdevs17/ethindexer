@@ -238,7 +238,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   // Fallback analysis when backend is unavailable (same as your working backend logic)
   const fallbackAnalysis = async (input: string): Promise<{ message: string; isQueryReady: boolean }> => {
-    const lowerInput = input.toLowerCase();
+    // const lowerInput = input.toLowerCase();
     
     // Check for common patterns
     const hasToken = /usdc|usdt|weth|ethereum|0x[a-f0-9]{40}/i.test(input);
@@ -266,7 +266,15 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         message: "What would you like me to do with this token? For example:\n\n• Index all transfers\n• Track transfers for a specific address\n• Monitor transfers above a certain value"
       };
     }
-    
+
+    if(!hasBlockInfo) {
+      // Provide block range guidance
+      return {
+        isQueryReady: false,
+        message: "Would you like to specify a block range? For example:\n\n• From the latest 1000 blocks\n• From block 18000000 to latest\n• Just say 'latest' for ongoing monitoring"
+      };
+    }
+
     return {
       isQueryReady: false,
       message: "Would you like to specify a block range? For example:\n\n• From the latest 1000 blocks\n• From block 18000000 to latest\n• Just say 'latest' for ongoing monitoring"
