@@ -58,7 +58,7 @@ backend/uploads/
 backend/temp/
 backend/logs/
 backend/coverage/
-backend/package-lock.json
+# backend/package-lock.json
 
 # Database
 *.sqlite
