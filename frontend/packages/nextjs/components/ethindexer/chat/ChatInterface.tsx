@@ -113,6 +113,12 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       const chatResponse = await sendChatMessage(content);
       console.log('🤖 Chat backend response:', chatResponse);
 
+      // ADD THIS DEBUG BLOCK:
+      console.log('🔍 Debug check:');
+      console.log('  - isQueryReady:', chatResponse.isQueryReady);
+      console.log('  - suggestedQuery:', chatResponse.suggestedQuery);
+      console.log('  - confidence:', chatResponse.confidence);
+
       // Add assistant response
       const assistantMessage = addMessage({
         type: 'assistant',
@@ -129,13 +135,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       // If the query is ready to execute, proceed with job creation
       if (chatResponse.isQueryReady && chatResponse.suggestedQuery) {
+        console.log('✅ EXECUTING QUERY - conditions met!');
+        console.log('  - chatResponse.isQueryReady =', chatResponse.isQueryReady);
+        console.log('  - chatResponse.suggestedQuery =', chatResponse.suggestedQuery);
         try {
           // Small delay for better UX
           await new Promise(resolve => setTimeout(resolve, 1000));
-
-          console.log('🚀 Executing query:', chatResponse.suggestedQuery);
+          
+          console.log('🚀 About to call onExecuteQuery with:', chatResponse.suggestedQuery);
           const result = await onExecuteQuery(chatResponse.suggestedQuery);
-          console.log('📊 Job creation result:', result);
+          console.log('📊 onExecuteQuery returned:', result);
 
           // Handle different response structures from your orchestrator
           let jobId = null;
@@ -169,12 +178,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             });
           }
         } catch (execError) {
-          console.error('❌ Job execution error:', execError);
+          console.error('❌ onExecuteQuery failed:', execError);
           addMessage({
             type: 'system',
             content: `❌ Error creating job: ${execError instanceof Error ? execError.message : 'Unknown error'}`
           });
         }
+      } else {
+        console.log('❌ NOT executing query:');
+        console.log('  - isQueryReady:', chatResponse.isQueryReady);
+        console.log('  - suggestedQuery exists:', !!chatResponse.suggestedQuery);
       }
 
     } catch (chatError) {

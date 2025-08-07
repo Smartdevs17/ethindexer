@@ -274,7 +274,7 @@ export const EthIndexerDashboard = () => {
                     
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>{job.progress}% complete</span>
-                      <span>{new Date(job.timestamp).toLocaleTimeString()}</span>
+                      <span>{job.timestamp ? new Date(job.timestamp).toLocaleTimeString() : 'No timestamp'}</span>
                     </div>
                   </div>
                 ))

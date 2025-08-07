@@ -58,6 +58,7 @@ backend/uploads/
 backend/temp/
 backend/logs/
 backend/coverage/
+backend/package-lock.json
 
 # Database
 *.sqlite
@@ -74,6 +75,7 @@ frontend/public/sw.js
 frontend/public/workbox-*.js
 frontend/public/worker-*.js
 frontend/public/fallback-*.js
+frontend/yarn.lock
 
 # Scaffold-ETH specific
 frontend/packages/nextjs/.next/
