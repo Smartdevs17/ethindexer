@@ -1,3 +1,4 @@
+// Enhanced Dashboard.tsx with better job handling
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -23,6 +24,7 @@ export const EthIndexerDashboard = () => {
     connectedClients,
     debugInfo,
     createJob,
+    forceRefreshJobs, // Use the new force refresh function
   } = useEthIndexer();
 
   const [queryInput, setQueryInput] = useState("");
@@ -44,26 +46,42 @@ export const EthIndexerDashboard = () => {
     };
 
     loadStats();
-
-    // Refresh stats every 30 seconds
     const interval = setInterval(loadStats, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const handleCreateJob = async () => {
-    if (!queryInput.trim()) return;
+  // Enhanced handleCreateJob that works for both simple and chat interfaces
+  const handleCreateJob = async (query?: string) => {
+    const queryToUse = query || queryInput.trim();
+    if (!queryToUse) return;
+    
+    console.log('🏗️ Dashboard creating job:', queryToUse);
+    console.log('🔍 Job creation context:', {
+      fromChat: !!query,
+      fromSimple: !query,
+      queryLength: queryToUse.length
+    });
+    
     setIsCreatingJob(true);
+    
     try {
-      const result = await createJob(queryInput);
-      setQueryInput("");
+      const result = await createJob(queryToUse);
+      console.log('✅ Dashboard job creation result:', result);
+      
+      // Clear input only if using simple interface
+      if (!query) {
+        setQueryInput('');
+      }
+      
+      // Force refresh after a short delay
+      setTimeout(() => {
+        forceRefreshJobs();
+      }, 500);
+      
       return result;
     } catch (error) {
-      console.error("Failed to create job:", error);
-      alert(
-        `Failed to create job: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      console.error('❌ Dashboard job creation failed:', error);
+      alert(`Failed to create job: ${error instanceof Error ? error.message : String(error)}`);
       throw error;
     } finally {
       setIsCreatingJob(false);
@@ -77,8 +95,64 @@ export const EthIndexerDashboard = () => {
     }
   };
 
+  // Enhanced job timestamp formatter with detailed debugging
+  const formatJobTimestamp = (timestamp: any, jobId?: string): string => {
+    if (!timestamp) {
+      console.warn(`⚠️ Job ${jobId}: No timestamp provided`);
+      return 'No timestamp';
+    }
+    
+    try {
+      let date: Date;
+      
+      console.log(`🕐 Job ${jobId}: Formatting timestamp:`, {
+        value: timestamp,
+        type: typeof timestamp,
+        isDate: timestamp instanceof Date,
+        toString: String(timestamp)
+      });
+      
+      if (timestamp instanceof Date) {
+        date = timestamp;
+      } else if (typeof timestamp === 'string') {
+        date = new Date(timestamp);
+      } else if (typeof timestamp === 'number') {
+        date = new Date(timestamp);
+      } else {
+        console.warn(`⚠️ Job ${jobId}: Invalid timestamp type:`, typeof timestamp, timestamp);
+        return 'Invalid type';
+      }
+      
+      if (isNaN(date.getTime())) {
+        console.warn(`⚠️ Job ${jobId}: Invalid date created:`, timestamp);
+        return 'Invalid date';
+      }
+      
+      const formatted = date.toLocaleDateString();
+      console.log(`✅ Job ${jobId}: Formatted timestamp successfully:`, formatted);
+      return formatted;
+    } catch (error) {
+      console.error(`❌ Job ${jobId}: Error formatting timestamp:`, error, timestamp);
+      return 'Format error';
+    }
+  };
+
   // Filter jobs based on toggle
   const displayJobs = showCompletedJobs ? jobs : jobs.filter((job) => job.status !== "completed");
+
+  // Debug: Log jobs whenever they change
+  useEffect(() => {
+    console.log('📊 Jobs state updated:', {
+      totalJobs: jobs.length,
+      displayJobs: displayJobs.length,
+      jobs: jobs.map(job => ({
+        id: job.jobId,
+        status: job.status,
+        timestamp: job.timestamp,
+        timestampType: typeof job.timestamp
+      }))
+    });
+  }, [jobs, displayJobs]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4">
@@ -153,7 +227,7 @@ export const EthIndexerDashboard = () => {
               </div>
 
               <button
-                onClick={handleCreateJob}
+                onClick={() => handleCreateJob()}
                 disabled={!queryInput.trim() || isCreatingJob}
                 className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white py-3 px-6 rounded-lg font-medium transition-colors disabled:cursor-not-allowed"
               >
@@ -162,7 +236,7 @@ export const EthIndexerDashboard = () => {
             </div>
 
             {/* Query Templates */}
-            <div>
+            <div className="mt-4">
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">💡 Example Queries:</p>
               <div className="flex flex-wrap gap-2">
                 {QUERY_TEMPLATES.map((template, index) => (
@@ -179,7 +253,7 @@ export const EthIndexerDashboard = () => {
 
             {/* System Status */}
             {systemStatus && (
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+              <div className="mt-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                 <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-1">System Status</h4>
                 <p className="text-sm text-blue-800 dark:text-blue-200">{systemStatus}</p>
               </div>
@@ -204,12 +278,20 @@ export const EthIndexerDashboard = () => {
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                 📊 Jobs Overview ({displayJobs.length})
               </h2>
-              <button
-                onClick={() => setShowCompletedJobs(!showCompletedJobs)}
-                className="text-sm px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              >
-                {showCompletedJobs ? "🔍 Hide Completed" : "📋 Show All"}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={forceRefreshJobs}
+                  className="text-sm px-3 py-1 bg-blue-100 dark:bg-blue-700 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-600 transition-colors"
+                >
+                  🔄 Refresh
+                </button>
+                <button
+                  onClick={() => setShowCompletedJobs(!showCompletedJobs)}
+                  className="text-sm px-3 py-1 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  {showCompletedJobs ? "🔍 Hide Completed" : "📋 Show All"}
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -254,11 +336,7 @@ export const EthIndexerDashboard = () => {
 
                     <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                       <span>{job.progress}% complete</span>
-                      <span>
-                        {job.timestamp
-                          ? new Date(job.timestamp).toLocaleString()
-                          : "No timestamp"}
-                      </span>
+                      <span>{formatJobTimestamp(job.timestamp, job.jobId)}</span>
                     </div>
                   </div>
                 ))
@@ -266,7 +344,7 @@ export const EthIndexerDashboard = () => {
             </div>
           </div>
 
-          {/* Transfers Section - CORRECTED PROPERTY NAMES */}
+          {/* Transfers Section */}
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -330,21 +408,41 @@ export const EthIndexerDashboard = () => {
           </div>
 
           {showDebugInfo && (
-            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4">
-              <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-auto">
-                {JSON.stringify(
-                  {
-                    isConnected,
-                    connectedClients,
-                    jobsCount: jobs.length,
-                    transfersCount: transfers.length,
-                    systemStatus,
-                    debugInfo,
-                  },
-                  null,
-                  2,
-                )}
-              </pre>
+            <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 space-y-4">
+              {/* Recent debug messages */}
+              <div>
+                <h4 className="font-semibold text-sm mb-2">Recent Activity:</h4>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {debugInfo.slice(0, 10).map((info, index) => (
+                    <div key={index} className="text-xs text-gray-600 dark:text-gray-400">
+                      {info}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {/* System state */}
+              <div>
+                <h4 className="font-semibold text-sm mb-2">System State:</h4>
+                <pre className="text-xs text-gray-600 dark:text-gray-400 overflow-auto">
+                  {JSON.stringify(
+                    {
+                      isConnected,
+                      connectedClients,
+                      jobsCount: jobs.length,
+                      transfersCount: transfers.length,
+                      systemStatus,
+                      lastJobTimestamps: jobs.slice(0, 3).map(job => ({
+                        id: job.jobId,
+                        timestamp: job.timestamp,
+                        timestampType: typeof job.timestamp
+                      }))
+                    },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </div>
             </div>
           )}
         </div>
