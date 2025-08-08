@@ -5,14 +5,19 @@ import { AiService, IndexingConfig } from '../ai/ai.service';
 import { ethers } from 'ethers';
 import { DynamicApiService } from '../api/dynamic-api.service';
 
-export interface IndexingJobResult {
+interface IndexingJobResult {
   jobId: string;
-  status: 'created' | 'active' | 'completed' | 'error';
+  status: 'pending' | 'active' | 'completed' | 'error' | 'paused';
   message: string;
   config: IndexingConfig;
-  progress?: number;
-  processedRecords?: number;
+  progress: number;
+  processedRecords: number;
   estimatedBlocks?: number;
+  
+  timestamp: Date;      // Primary timestamp for UI display
+  createdAt: Date;      // Job creation time
+  updatedAt: Date;      // Last update time
+  completedAt?: Date;   // Completion time (optional)
 }
 
 @Injectable()
@@ -83,10 +88,16 @@ export class IndexingOrchestratorService {
 
       return {
         jobId: job.id,
-        status: 'created',
+        status: 'pending',
         message: 'Indexing job created and started',
         config: resolvedConfig,
+        progress: 0,
+        processedRecords: 0,
         estimatedBlocks: this.calculateEstimatedBlocks(resolvedConfig),
+        timestamp: job.updatedAt || job.createdAt,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        completedAt: job.completedAt,
       };
 
     } catch (error) {
@@ -309,28 +320,38 @@ export class IndexingOrchestratorService {
       progress: job.progress,
       processedRecords: parseInt(job.blocksProcessed),
       estimatedBlocks: job.estimatedBlocks ? parseInt(job.estimatedBlocks) : undefined,
+      timestamp: job.updatedAt || job.createdAt,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
+      completedAt: job.completedAt,
     };
   }
 
-  /**
-   * List all jobs
-   */
-  async listJobs(limit: number = 10): Promise<IndexingJobResult[]> {
-    const jobs = await this.prisma.indexingJob.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+/**
+ * List all jobs with timestamp fields included
+ */
+async listJobs(limit: number = 10): Promise<IndexingJobResult[]> {
+  const jobs = await this.prisma.indexingJob.findMany({
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
 
-    return jobs.map(job => ({
-      jobId: job.id,
-      status: job.status as any,
-      message: this.getStatusMessage(job),
-      config: job.config as unknown as IndexingConfig,
-      progress: job.progress,
-      processedRecords: parseInt(job.blocksProcessed),
-      estimatedBlocks: job.estimatedBlocks ? parseInt(job.estimatedBlocks) : undefined,
-    }));
-  }
+  return jobs.map(job => ({
+    jobId: job.id,
+    status: job.status as any,
+    message: this.getStatusMessage(job),
+    config: job.config as unknown as IndexingConfig,
+    progress: job.progress,
+    processedRecords: parseInt(job.blocksProcessed),
+    estimatedBlocks: job.estimatedBlocks ? parseInt(job.estimatedBlocks) : undefined,
+    
+    // ✅ ADD THESE MISSING TIMESTAMP FIELDS:
+    timestamp: job.updatedAt || job.createdAt,  // Use updatedAt as primary timestamp
+    createdAt: job.createdAt,                   // When job was created
+    updatedAt: job.updatedAt,                   // When job was last updated
+    completedAt: job.completedAt,               // When job was completed (if applicable)
+  }));
+}
 
   // Helper methods
   private determinePriority(config: IndexingConfig): string {
