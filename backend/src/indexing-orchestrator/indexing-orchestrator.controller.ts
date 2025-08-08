@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, Param, Query, Logger } from '@nestjs/common';
 import { IndexingOrchestratorService } from './indexing-orchestrator.service';
+import { IndexingJobResult } from './indexing-orchestrator.interface';
 
 @Controller('orchestrator')
 export class IndexingOrchestratorController {
@@ -91,7 +92,13 @@ export class IndexingOrchestratorController {
    * GET /orchestrator/jobs
    */
   @Get('jobs')
-  async listJobs(@Query('limit') limit?: string) {
+  async listJobs(@Query('limit') limit?: string): Promise<{
+    success: boolean;
+    jobs: IndexingJobResult[];
+    count: number;
+    timestamp: Date;
+    error?: string;
+  }> {
     try {
       const jobLimit = limit ? parseInt(limit) : 10;
       const jobs = await this.orchestratorService.listJobs(jobLimit);
@@ -108,6 +115,8 @@ export class IndexingOrchestratorController {
       
       return {
         success: false,
+        jobs: [],
+        count: 0,
         error: error.message,
         timestamp: new Date()
       };

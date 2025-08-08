@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { IndexingOrchestratorModule } from './indexing-orchestrator/indexing-orchestrator.module';
 import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { ChatModule } from './chat/chat.module';
+import { TokensModule } from './tokens/tokens.module';
 
 
 @Module({
@@ -24,6 +25,7 @@ import { ChatModule } from './chat/chat.module';
     IndexingOrchestratorModule,
     OrchestratorModule,
     ChatModule,
+    TokensModule,
     
   ],
   controllers: [AppController],

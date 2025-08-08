@@ -4,21 +4,9 @@ import { IndexerService } from '../indexer/indexer.service';
 import { AiService, IndexingConfig } from '../ai/ai.service';
 import { ethers } from 'ethers';
 import { DynamicApiService } from '../api/dynamic-api.service';
+import { IndexingJobResult } from './indexing-orchestrator.interface';
 
-interface IndexingJobResult {
-  jobId: string;
-  status: 'pending' | 'active' | 'completed' | 'error' | 'paused';
-  message: string;
-  config: IndexingConfig;
-  progress: number;
-  processedRecords: number;
-  estimatedBlocks?: number;
-  
-  timestamp: Date;      // Primary timestamp for UI display
-  createdAt: Date;      // Job creation time
-  updatedAt: Date;      // Last update time
-  completedAt?: Date;   // Completion time (optional)
-}
+
 
 @Injectable()
 export class IndexingOrchestratorService {
