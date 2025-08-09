@@ -15,81 +15,72 @@ export interface TokenInfo {
 export class TokensService {
   private readonly logger = new Logger(TokensService.name);
   
-  // Popular Ethereum tokens database
-  private readonly popularTokens: TokenInfo[] = [
-    {
-      address: '0xA0b86a33E6441e67a98b28E4Bd2b2a6a8C0BF5E1',
-      symbol: 'USDC',
-      name: 'USD Coin',
-      decimals: 6,
-      isPopular: true,
-      tags: ['stablecoin', 'defi', 'payments']
-    },
-    {
-      address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
-      symbol: 'USDT',
-      name: 'Tether USD',
-      decimals: 6,
-      isPopular: true,
-      tags: ['stablecoin', 'payments']
-    },
-    {
-      address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
-      symbol: 'WETH',
-      name: 'Wrapped Ether',
-      decimals: 18,
-      isPopular: true,
-      tags: ['wrapped', 'defi']
-    },
-    {
-      address: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
-      symbol: 'DAI',
-      name: 'Dai Stablecoin',
-      decimals: 18,
-      isPopular: true,
-      tags: ['stablecoin', 'defi', 'makerdao']
-    },
-    {
-      address: '0x514910771AF9Ca656af840dff83E8264EcF986CA',
-      symbol: 'LINK',
-      name: 'ChainLink Token',
-      decimals: 18,
-      isPopular: true,
-      tags: ['oracle', 'defi']
-    },
-    {
-      address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
-      symbol: 'UNI',
-      name: 'Uniswap',
-      decimals: 18,
-      isPopular: true,
-      tags: ['governance', 'dex', 'defi']
-    },
-    {
-      address: '0x7D1AfA7B718fb893dB30A3aBc0Cfc608AaCfeBB0',
-      symbol: 'MATIC',
-      name: 'Polygon',
-      decimals: 18,
-      isPopular: true,
-      tags: ['layer2', 'scaling']
-    },
-    {
-      address: '0xA0b86a33E6441e67a98b28E4Bd2b2a6a8C0BF5E1',
-      symbol: 'SHIB',
-      name: 'SHIBA INU',
-      decimals: 18,
-      isPopular: true,
-      tags: ['meme', 'community']
-    },
-    {
-      address: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE',
-      symbol: 'SHIB',
-      name: 'SHIBA INU',
-      decimals: 18,
-      isPopular: true,
-      tags: ['meme', 'community']
-    }
-  ];
+private readonly popularTokens: TokenInfo[] = [
+  {
+    address: '0xA0b86a33E6441e67a98b28E4Bd2b2a6a8C0BF5E1',
+    symbol: 'USDC',
+    name: 'USD Coin',
+    decimals: 6,
+    isPopular: true,
+    tags: ['stablecoin', 'defi', 'payments']
+  },
+  {
+    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+    symbol: 'USDT',
+    name: 'Tether USD',
+    decimals: 6,
+    isPopular: true,
+    tags: ['stablecoin', 'payments']
+  },
+  {
+    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', 
+    symbol: 'WETH',
+    name: 'Wrapped Ether',
+    decimals: 18,
+    isPopular: true,
+    tags: ['wrapped', 'defi']
+  },
+  {
+    address: '0x6B175474E89094C44Da98b954EedeAC495271d0F',
+    symbol: 'DAI',
+    name: 'Dai Stablecoin',
+    decimals: 18,
+    isPopular: true,
+    tags: ['stablecoin', 'defi', 'makerdao']
+  },
+  {
+    address: '0x514910771AF9Ca656af840dff83E8264EcF986CA', 
+    symbol: 'LINK',
+    name: 'ChainLink Token',
+    decimals: 18,
+    isPopular: true,
+    tags: ['oracle', 'defi']
+  },
+  {
+    address: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984', 
+    symbol: 'UNI',
+    name: 'Uniswap',
+    decimals: 18,
+    isPopular: true,
+    tags: ['governance', 'dex', 'defi']
+  },
+  {
+    address: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',
+    symbol: 'MATIC',
+    name: 'Polygon',
+    decimals: 18,
+    isPopular: true,
+    tags: ['layer2', 'scaling']
+  },
+  {
+    address: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE',
+    symbol: 'SHIB',
+    name: 'SHIBA INU',
+    decimals: 18,
+    isPopular: true,
+    tags: ['meme', 'community']
+  }
+];
 
   /**
    * Search tokens by symbol, name, or address

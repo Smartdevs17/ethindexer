@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { ChatMessage } from "./ChatMessage";
-import { ChatInput } from "./ChatInput";
+import { SmartChatInput } from "./SmartChatInput";
 import { WelcomeMessage } from "./WelcomeMessage";
 
 export interface Message {
@@ -334,14 +334,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Input Area */}
       <div className="flex-shrink-0">
-        <ChatInput
+        <SmartChatInput
           onSendMessage={handleUserMessage}
           disabled={isProcessing || isTyping}
-          placeholder={
-            messages.length === 0
-              ? "Ask me to index blockchain data..."
-              : getContextualHelp()
-          }
         />
       </div>
     </div>
