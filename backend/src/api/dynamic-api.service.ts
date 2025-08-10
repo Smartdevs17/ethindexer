@@ -309,7 +309,22 @@ export class DynamicApiService {
       });
 
       if (!endpoint) {
-        throw new Error(`Endpoint ${path} not found`);
+        // Try to create default endpoints if the requested one doesn't exist
+        if (path === '/api/transfers') {
+          this.logger.log('🔄 Transfers endpoint not found, creating default...');
+          await this.createDefaultTransfersEndpoint();
+          
+          // Try to get the endpoint again
+          const newEndpoint = await this.prisma.apiEndpoint.findUnique({
+            where: { path },
+          });
+          
+          if (!newEndpoint) {
+            throw new Error(`Failed to create endpoint ${path}`);
+          }
+        } else {
+          throw new Error(`Endpoint ${path} not found`);
+        }
       }
 
       // Build dynamic query
@@ -362,20 +377,24 @@ export class DynamicApiService {
       dynamicFilters += ` AND (t."from" ILIKE '%${params.address}%' OR t."to" ILIKE '%${params.address}%')`;
     }
     
+    if (params.token) {
+      dynamicFilters += ` AND tk.address ILIKE '%${params.token}%'`;
+    }
+    
     if (params.fromBlock) {
-      dynamicFilters += ` AND CAST(t."blockNumber" AS INTEGER) >= ${params.fromBlock}`;
+      dynamicFilters += ` AND CAST(t."blockNumber" AS INTEGER) >= ${parseInt(params.fromBlock)}`;
     }
     
     if (params.toBlock) {
-      dynamicFilters += ` AND CAST(t."blockNumber" AS INTEGER) <= ${params.toBlock}`;
+      dynamicFilters += ` AND CAST(t."blockNumber" AS INTEGER) <= ${parseInt(params.toBlock)}`;
     }
     
     if (params.minValue) {
-      dynamicFilters += ` AND CAST(t.value AS DECIMAL) >= ${params.minValue}`;
+      dynamicFilters += ` AND CAST(t.value AS DECIMAL) >= ${parseFloat(params.minValue)}`;
     }
     
     if (params.maxValue) {
-      dynamicFilters += ` AND CAST(t.value AS DECIMAL) <= ${params.maxValue}`;
+      dynamicFilters += ` AND CAST(t.value AS DECIMAL) <= ${parseFloat(params.maxValue)}`;
     }
 
     // Always quote blockNumber, gasUsed, gasPrice, txHash, and name in ORDER BY and SELECT
@@ -453,23 +472,132 @@ export class DynamicApiService {
     }));
   }
 
+  /**
+   * 🔧 Create default transfers endpoint if none exists
+   */
+  async createDefaultTransfersEndpoint(): Promise<void> {
+    this.logger.log('🔧 Creating default transfers endpoint...');
 
-/**
- * 📄 Create a new API endpoint
- */
+    try {
+      // Check if transfers endpoint already exists
+      const existingEndpoint = await this.prisma.apiEndpoint.findUnique({
+        where: { path: '/api/transfers' },
+      });
+
+      if (existingEndpoint) {
+        this.logger.log('✅ Transfers endpoint already exists');
+        return;
+      }
+
+      // Create default transfers endpoint
+      const defaultConfig = {
+        path: '/api/transfers',
+        query: 'Show me all token transfers',
+        sqlQuery: `
+          SELECT 
+            t.id,
+            t."blockNumber",
+            t."txHash",
+            t."from",
+            t."to", 
+            t.value,
+            t.timestamp,
+            t."gasUsed",
+            t."gasPrice",
+            tk.symbol,
+            tk."name" as "tokenName",
+            tk.address as "tokenAddress"
+          FROM "Transfer" t
+          JOIN "Token" tk ON t."tokenId" = tk.id
+          WHERE 1=1
+          {{DYNAMIC_FILTERS}}
+          ORDER BY {{SORT_BY}} {{SORT_ORDER}}
+          LIMIT {{LIMIT}} OFFSET {{OFFSET}}
+        `,
+        parameters: {
+          token: 'string (optional) - Filter by token address',
+          fromBlock: 'number (optional) - Start block number',
+          toBlock: 'number (optional) - End block number',
+          address: 'string (optional) - Filter by from/to address',
+          minValue: 'string (optional) - Minimum transfer value',
+          maxValue: 'string (optional) - Maximum transfer value',
+          limit: 'number (optional) - Number of results (default: 100)',
+          offset: 'number (optional) - Offset for pagination (default: 0)',
+          sortBy: 'string (optional) - Sort field (default: timestamp)',
+          sortOrder: 'string (optional) - Sort order: ASC/DESC (default: DESC)'
+        },
+        description: 'Get all token transfers with optional filtering',
+        cacheTime: 300,
+      };
+
+      await this.prisma.apiEndpoint.create({
+        data: defaultConfig,
+      });
+
+      this.logger.log('✅ Created default transfers endpoint: /api/transfers');
+
+    } catch (error) {
+      this.logger.error('❌ Failed to create default transfers endpoint:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🔧 Initialize default endpoints
+   */
+  async initializeDefaultEndpoints(): Promise<void> {
+    this.logger.log('🚀 Initializing default API endpoints...');
+    
+    try {
+      // Create default transfers endpoint
+      await this.createDefaultTransfersEndpoint();
+      
+      // Generate API endpoints from any existing completed jobs
+      const completedJobs = await this.prisma.indexingJob.findMany({
+        where: { status: 'completed' },
+      });
+      
+      for (const job of completedJobs) {
+        try {
+          this.logger.log(`🔧 Generating API endpoint for completed job ${job.id}`);
+          await this.generateApiFromJob(job.id);
+        } catch (error) {
+          this.logger.error(`❌ Failed to generate API for job ${job.id}:`, error);
+        }
+      }
+      
+      this.logger.log('✅ Default endpoints initialized');
+    } catch (error) {
+      this.logger.error('❌ Failed to initialize default endpoints:', error);
+    }
+  }
+
+  /**
+   * 📄 Create a new API endpoint
+   */
+  /**
+   * 📄 Create or update API endpoint (handles duplicates)
+   */
   async createApiEndpoint(jobId: string, path: string, query: string, sqlQuery: string): Promise<void> {
-    // Create the API endpoint in database
-    const endpoint = await this.prisma.apiEndpoint.create({
-      data: {
+    // Use UPSERT instead of CREATE to handle duplicates
+    const endpoint = await this.prisma.apiEndpoint.upsert({
+      where: { path },
+      create: {
         path,
         query,
         sqlQuery,
         parameters: {},
         description: `Auto-generated endpoint for: ${query}`,
       },
+      update: {
+        query, // Update with latest query
+        sqlQuery, // Update with latest SQL
+        lastUsed: new Date(), // Mark as recently used
+        description: `Auto-generated endpoint for: ${query}`,
+      },
     });
 
-    // 🚀 EMIT WEBSOCKET EVENT FOR NEW API
+    // 🚀 EMIT WEBSOCKET EVENT FOR NEW/UPDATED API
     this.indexerGateway.emitApiCreated({
       jobId: jobId,
       path: endpoint.path,
@@ -478,6 +606,6 @@ export class DynamicApiService {
       timestamp: new Date(),
     });
 
-    this.logger.log(`🔗 Created new API endpoint: ${path}`);
+    this.logger.log(`🔗 Created/updated API endpoint: ${path}`);
   }
 }

@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Post } from '@nestjs/common';
 import { PrismaService } from './database/prisma.service';
 
 @Controller()
@@ -18,6 +18,25 @@ export class AppController {
     };
   }
 
+  @Post('seed')
+  async seedDatabase() {
+    try {
+      const result = await this.prisma.seedSampleData();
+      return {
+        success: true,
+        message: 'Database seeded successfully',
+        data: result,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        timestamp: new Date(),
+      };
+    }
+  }
+
   @Get()
   getRoot() {
     return {
@@ -25,6 +44,7 @@ export class AppController {
       version: '1.0.0',
       endpoints: {
         health: '/health',
+        seed: 'POST /seed',
         api: '/api',
         indexer: '/indexer',
         ai: '/ai',

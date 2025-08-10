@@ -1,11 +1,17 @@
-import { Controller, Get, Query, Param, Logger, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Param, Query, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { DynamicApiService } from './dynamic-api.service';
+import { Logger } from '@nestjs/common';
 
 @Controller('api')
-export class DynamicApiController {
+export class DynamicApiController implements OnModuleInit {
   private readonly logger = new Logger(DynamicApiController.name);
 
   constructor(private readonly dynamicApiService: DynamicApiService) {}
+
+  async onModuleInit() {
+    // Initialize default endpoints when the module starts
+    await this.dynamicApiService.initializeDefaultEndpoints();
+  }
 
   /**
    * 📋 List all available dynamic endpoints
