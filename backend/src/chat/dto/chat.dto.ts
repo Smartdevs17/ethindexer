@@ -14,6 +14,7 @@ export interface ChatResponseDto {
   suggestedQuery?: string;
   needsMoreInfo?: string[];
   confidence: number;
+  suggestions?: string[];
   conversationContext?: {
     totalMessages: number;
     lastUserMessage: string;

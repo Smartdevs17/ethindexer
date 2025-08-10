@@ -16,18 +16,19 @@ export default function QueryBuilderPage() {
   const { createJob } = useEthIndexer();
   const router = useRouter();
 
-  const handleCreateAPI = async () => {
-    if (!queryInput.trim()) return;
+  const handleCreateAPI = async (query?: string) => {
+    const finalQuery = query || queryInput;
+    if (!finalQuery.trim()) return;
     
     setIsCreating(true);
     setShowSuccess(false);
     
     try {
-      const result = await createJob(queryInput);
+      const result = await createJob(finalQuery);
       
       // Show success state
       setCreatedAPI({
-        query: queryInput,
+        query: finalQuery,
         jobId: result.result?.jobId || result.jobId || 'Processing...'
       });
       setShowSuccess(true);
@@ -206,7 +207,7 @@ export default function QueryBuilderPage() {
                   disabled={isCreating}
                 />
                 <button
-                  onClick={handleCreateAPI}
+                  onClick={() => handleCreateAPI()}
                   disabled={isCreating || !queryInput.trim()}
                   className="absolute bottom-3 right-3 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors"
                 >

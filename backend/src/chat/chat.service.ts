@@ -1,12 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AiService } from '../ai/ai.service';
 import { ChatMessageDto, ChatResponseDto } from './dto/chat.dto';
+import { ConfigService } from '@nestjs/config';
+import OpenAI from 'openai';
 
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
+  private openai: OpenAI;
 
-  constructor(private readonly aiService: AiService) {}
+  constructor(
+    private readonly aiService: AiService,
+    private readonly configService: ConfigService
+  ) {
+    this.openai = new OpenAI({
+      apiKey: this.configService.get<string>('OPENAI_API_KEY'),
+    });
+  }
 
   /**
    * Process a conversational message and determine next action
@@ -18,18 +28,19 @@ export class ChatService {
     this.logger.log(`💬 Processing chat: "${userMessage}"`);
 
     try {
-      // Analyze the user's message WITH conversation context
-      const analysis = this.analyzeWithConversationContext(userMessage, conversationHistory);
+      // Use OpenAI for intelligent conversation analysis
+      const aiAnalysis = await this.analyzeWithAI(userMessage, conversationHistory);
       
-      if (analysis.isQueryReady) {
+      if (aiAnalysis.isQueryReady) {
         // Message is ready to be executed - prepare it for the orchestrator
-        this.logger.log(`✅ Query ready for execution: "${analysis.combinedQuery}"`);
+        this.logger.log(`✅ Query ready for execution: "${aiAnalysis.combinedQuery}"`);
         
         return {
-          message: analysis.response,
+          message: aiAnalysis.response,
           isQueryReady: true,
-          suggestedQuery: analysis.combinedQuery,
-          confidence: analysis.confidence,
+          suggestedQuery: aiAnalysis.combinedQuery,
+          confidence: aiAnalysis.confidence,
+          suggestions: aiAnalysis.suggestions,
           conversationContext: {
             totalMessages: conversationHistory.length + 1,
             lastUserMessage: userMessage
@@ -37,13 +48,14 @@ export class ChatService {
         };
       } else {
         // Message needs more information - guide the user
-        this.logger.log(`🤔 Query needs more info: ${analysis.needsMoreInfo?.join(', ')}`);
+        this.logger.log(`🤔 Query needs more info: ${aiAnalysis.needsMoreInfo?.join(', ')}`);
         
         return {
-          message: analysis.response,
+          message: aiAnalysis.response,
           isQueryReady: false,
-          needsMoreInfo: analysis.needsMoreInfo,
-          confidence: analysis.confidence,
+          needsMoreInfo: aiAnalysis.needsMoreInfo,
+          confidence: aiAnalysis.confidence,
+          suggestions: aiAnalysis.suggestions,
           conversationContext: {
             totalMessages: conversationHistory.length + 1,
             lastUserMessage: userMessage
@@ -53,12 +65,15 @@ export class ChatService {
     } catch (error) {
       this.logger.error('❌ Chat processing failed:', error);
       
-      // Fallback response
+      // Fallback to basic analysis if AI fails
+      const fallbackAnalysis = this.analyzeWithConversationContext(userMessage, conversationHistory);
+      
       return {
-        message: "I'm having trouble processing your request. Could you try rephrasing what you'd like to index?",
-        isQueryReady: false,
-        needsMoreInfo: ['clarification'],
-        confidence: 0.1,
+        message: fallbackAnalysis.response,
+        isQueryReady: fallbackAnalysis.isQueryReady,
+        suggestedQuery: fallbackAnalysis.combinedQuery,
+        needsMoreInfo: fallbackAnalysis.needsMoreInfo,
+        confidence: fallbackAnalysis.confidence,
         conversationContext: {
           totalMessages: conversationHistory.length + 1,
           lastUserMessage: userMessage
@@ -68,7 +83,93 @@ export class ChatService {
   }
 
   /**
-   * Analyze user message WITH conversation context
+   * Use OpenAI to analyze conversation intelligently
+   */
+  private async analyzeWithAI(
+    message: string, 
+    history: ChatMessageDto[]
+  ): Promise<{
+    isQueryReady: boolean;
+    response: string;
+    confidence: number;
+    needsMoreInfo?: string[];
+    combinedQuery?: string;
+    suggestions?: string[];
+  }> {
+    const conversationContext = history.map(h => `${h.role}: ${h.content}`).join('\n');
+    
+    const prompt = `You are an AI assistant for blockchain data indexing. Your job is to help users create queries to index blockchain data.
+
+Current conversation:
+${conversationContext}
+User: ${message}
+
+Analyze the user's request and determine if they have provided enough information to create a blockchain indexing query. 
+
+A complete query needs:
+1. What to track (tokens like USDC, WETH, USDT, or contract addresses)
+2. What action to take (index, track, monitor)
+3. Block range (optional, can default to recent blocks)
+
+Respond with JSON only:
+{
+  "isQueryReady": boolean,
+  "response": "Your helpful response to the user",
+  "confidence": number (0-1),
+  "needsMoreInfo": ["missing_component1", "missing_component2"] (if not ready),
+  "combinedQuery": "complete query string" (if ready),
+  "suggestions": ["suggestion1", "suggestion2", "suggestion3"]
+}
+
+Examples of good responses:
+- If user says "hi" or "hello": Ask what they want to track
+- If user says "track USDC": Ask for more details like block range
+- If user says "index USDC transfers from recent blocks": Ready to execute
+- If user says "monitor my wallet": Ask for wallet address
+
+Be conversational, helpful, and guide users toward creating complete queries.`;
+
+    try {
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { 
+            role: 'system', 
+            content: 'You are a helpful blockchain data indexing assistant. Always respond with valid JSON only.' 
+          },
+          { 
+            role: 'user', 
+            content: prompt 
+          }
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.7,
+        max_tokens: 800,
+      });
+
+      const content = response.choices[0].message.content;
+      this.logger.log('🤖 AI Response:', content);
+      
+      const analysis = JSON.parse(content);
+      
+      // Validate and clean the response
+      return {
+        isQueryReady: Boolean(analysis.isQueryReady),
+        response: analysis.response || "I'm here to help you index blockchain data!",
+        confidence: Math.min(Math.max(analysis.confidence || 0, 0), 1),
+        needsMoreInfo: Array.isArray(analysis.needsMoreInfo) ? analysis.needsMoreInfo : undefined,
+        combinedQuery: analysis.combinedQuery || undefined,
+        suggestions: Array.isArray(analysis.suggestions) ? analysis.suggestions : []
+      };
+
+    } catch (error) {
+      this.logger.error('❌ AI analysis failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Analyze user message WITH conversation context (fallback method)
    */
   private analyzeWithConversationContext(
     message: string, 
