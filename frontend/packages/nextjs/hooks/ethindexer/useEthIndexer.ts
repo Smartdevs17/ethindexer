@@ -8,8 +8,9 @@ interface Job {
   progress: number;
   status: string;
   timestamp: Date;
-   apiUrl?: string;
+  apiUrl?: string;
   apiDescription?: string;
+  apiStatus?: 'preparing' | 'ready'; // Add status for API preparation
 }
 
 interface Transfer {
@@ -134,18 +135,26 @@ export const useEthIndexer = () => {
         
         setJobs(prev => prev.map(job => {
           if (job.jobId === data.jobId) {
-            console.log(`✅ Updated job ${data.jobId} with API URL: ${data.path}`);
+            // Create full backend URL for the API endpoint
+            const fullApiUrl = `${apiUrl}${data.path}`;
+            console.log(`✅ Updated job ${data.jobId} with API URL: ${fullApiUrl}`);
+            
+            // Determine if the job is still active or completed
+            const isJobActive = job.status === 'active' || job.progress < 100;
+            const apiStatus = isJobActive ? 'preparing' : 'ready';
+            
             return { 
               ...job, 
-              apiUrl: data.path,
+              apiUrl: fullApiUrl,
               apiDescription: data.description,
-              status: 'completed' // Mark as completed when API is ready
+              apiStatus: apiStatus, // Add status to indicate if API is ready or preparing
+              // Don't mark as completed here - let the job progress handle that
             };
           }
           return job;
         }));
         
-        addDebugInfo(`✅ Job ${data.jobId} → API: ${data.path}`);
+        addDebugInfo(`✅ Job ${data.jobId} → API: ${data.path} (preparing)`);
       }
     });
 
@@ -162,7 +171,9 @@ export const useEthIndexer = () => {
             ? { 
                 ...job, 
                 ...data,
-                timestamp: safeTimestampToDate(data.timestamp, job.timestamp)
+                timestamp: safeTimestampToDate(data.timestamp, job.timestamp),
+                // Update API status to ready when job completes
+                apiStatus: data.status === 'completed' ? 'ready' : (job.apiStatus || 'preparing')
               }
             : job
         ));
@@ -257,7 +268,7 @@ export const useEthIndexer = () => {
         const data = await response.json();
         console.log('📥 Raw jobs data from API:', data);
         
-        // Convert jobs with proper timestamp handling
+        // Convert jobs with proper timestamp handling and generate API URLs
         const jobsWithTimestamps = (data.jobs || []).map((job: any) => {
           console.log(`🕐 Converting job ${job.jobId} timestamp:`, {
             original: job.timestamp,
@@ -265,6 +276,40 @@ export const useEthIndexer = () => {
             createdAt: job.createdAt,
             updatedAt: job.updatedAt
           });
+          
+          // Generate API URL for existing jobs
+          let generatedApiUrl = undefined;
+          let apiStatus: 'preparing' | 'ready' = 'preparing';
+          
+          if (job.status === 'completed' && job.config) {
+            // For completed jobs, generate the API URL
+            if (job.config.apiEndpoint) {
+              generatedApiUrl = `${apiUrl}/api/${job.config.apiEndpoint}`;
+              apiStatus = 'ready';
+            } else if (job.config.addresses && job.config.addresses.length > 0) {
+              // Generate URL based on token address
+              const address = job.config.addresses[0];
+              generatedApiUrl = `${apiUrl}/api/transfers?token=${address}`;
+              apiStatus = 'ready';
+            } else {
+              // Default transfers endpoint
+              generatedApiUrl = `${apiUrl}/api/transfers`;
+              apiStatus = 'ready';
+            }
+          } else if (job.status === 'active') {
+            // For active jobs, generate a preview API URL
+            if (job.config?.apiEndpoint) {
+              generatedApiUrl = `${apiUrl}/api/${job.config.apiEndpoint}`;
+              apiStatus = 'preparing';
+            } else if (job.config?.addresses && job.config.addresses.length > 0) {
+              const address = job.config.addresses[0];
+              generatedApiUrl = `${apiUrl}/api/transfers?token=${address}`;
+              apiStatus = 'preparing';
+            } else {
+              generatedApiUrl = `${apiUrl}/api/transfers`;
+              apiStatus = 'preparing';
+            }
+          }
           
           return {
             ...job,
@@ -276,12 +321,16 @@ export const useEthIndexer = () => {
             createdAt: job.createdAt ? safeTimestampToDate(job.createdAt) : undefined,
             updatedAt: job.updatedAt ? safeTimestampToDate(job.updatedAt) : undefined,
             completedAt: job.completedAt ? safeTimestampToDate(job.completedAt) : undefined,
+            // Add generated API URL and status
+            apiUrl: generatedApiUrl,
+            apiStatus: apiStatus,
+            apiDescription: job.config?.originalQuery || job.message,
           };
         });
         
-        console.log('✅ Jobs with converted timestamps:', jobsWithTimestamps);
+        console.log('✅ Jobs with converted timestamps and API URLs:', jobsWithTimestamps);
         setJobs(jobsWithTimestamps);
-        addDebugInfo(`Fetched ${jobsWithTimestamps.length} jobs with timestamps`);
+        addDebugInfo(`Fetched ${jobsWithTimestamps.length} jobs with timestamps and API URLs`);
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -361,9 +410,53 @@ export const useEthIndexer = () => {
     addDebugInfo('🔄 Manual job refresh completed');
   };
 
+  // Fetch existing transfers from API
+  const fetchTransfers = async () => {
+    try {
+      console.log('📡 Fetching transfers from API...');
+      const response = await fetch(`${apiUrl}/api/transfers?limit=50&sortBy=timestamp&sortOrder=DESC`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📥 Raw transfers data from API:', data);
+        
+        if (data.success && data.data) {
+          // Convert API data to Transfer format
+          const apiTransfers = data.data.map((transfer: any) => ({
+            id: transfer.id,
+            value: transfer.value,
+            token: {
+              address: transfer.tokenAddress,
+              symbol: transfer.symbol,
+              name: transfer.tokenName,
+            },
+            from: transfer.from,
+            to: transfer.to,
+            blockNumber: transfer.blockNumber,
+            timestamp: new Date(transfer.timestamp),
+            txHash: transfer.txHash,
+          }));
+          
+          console.log('✅ Transfers with converted format:', apiTransfers);
+          setTransfers(apiTransfers);
+          addDebugInfo(`Fetched ${apiTransfers.length} transfers from API`);
+        } else {
+          console.log('⚠️ No transfers data in response:', data);
+          addDebugInfo('No transfers data in API response');
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch transfers:', error);
+      addDebugInfo(`Transfer fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  };
+
   // Load initial data
   useEffect(() => {
     fetchJobs();
+    fetchTransfers(); // Add this to load existing transfers
     getStats();
   }, []);
 
@@ -383,6 +476,7 @@ export const useEthIndexer = () => {
     createJob,
     fetchJobs,
     forceRefreshJobs, // Add this for debugging
+    fetchTransfers, // Add this to the return object
     getStats,
     
     // Chat functionality

@@ -26,6 +26,7 @@ export const EthIndexerDashboard = () => {
     debugInfo,
     createJob,
     forceRefreshJobs, // Use the new force refresh function
+    fetchTransfers, // Add this to fetch transfers
   } = useEthIndexer();
 
   const [queryInput, setQueryInput] = useState("");
@@ -34,9 +35,21 @@ export const EthIndexerDashboard = () => {
   const [showCompletedJobs, setShowCompletedJobs] = useState(false);
   const [showAPIDisplay, setShowAPIDisplay] = useState(false);
   const [lastCreatedJob, setLastCreatedJob] = useState<{jobId: string, query: string, config?: any} | null>(null);
+  const [copiedJobId, setCopiedJobId] = useState<string | null>(null); // Track which job's URL was copied
 
   // Chat UI toggle state
   const [activeInterface, setActiveInterface] = useState<"simple" | "chat">("simple");
+
+  // Copy API URL to clipboard
+  const copyApiUrl = async (url: string, jobId: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedJobId(jobId);
+      setTimeout(() => setCopiedJobId(null), 2000); // Reset after 2 seconds
+    } catch (error) {
+      console.error('Failed to copy URL:', error);
+    }
+  };
 
   // Load backend stats on component mount
   useEffect(() => {
@@ -292,14 +305,14 @@ export const EthIndexerDashboard = () => {
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                📊 Jobs Overview ({displayJobs.length})
+                🔄 Indexing Jobs ({jobs.length})
               </h2>
               <div className="flex gap-2">
                 <button
                   onClick={forceRefreshJobs}
                   className="text-sm px-3 py-1 bg-blue-100 dark:bg-blue-700 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-600 transition-colors"
                 >
-                  🔄 Refresh
+                  🔄 Refresh Jobs
                 </button>
                 <button
                   onClick={() => setShowCompletedJobs(!showCompletedJobs)}
@@ -326,26 +339,48 @@ export const EthIndexerDashboard = () => {
               ) : (
                 displayJobs.map((job) => (
                   <div key={job.jobId} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-gray-900 dark:text-white">{job.jobId}</h3>
-                      <span
-                        className={`px-2 py-1 text-xs rounded-full ${
-                          job.status === "active"
-                            ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                            : job.status === "completed"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                            : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                        }`}
-                      >
-                        {job.status}
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                          {job.jobId.slice(0, 8)}...
+                        </span>
+                        {job.status === 'active' && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-green-600 dark:text-green-400">Active</span>
+                          </div>
+                        )}
+                        {job.status === 'completed' && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                            <span className="text-xs text-blue-600 dark:text-blue-400">Completed</span>
+                          </div>
+                        )}
+                        {job.status === 'error' && (
+                          <div className="flex items-center gap-1">
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span className="text-xs text-red-600 dark:text-red-400">Error</span>
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {job.progress}%
                       </span>
                     </div>
 
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{job.message}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      {job.message}
+                    </p>
 
                     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                       <div
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        className={`h-2 rounded-full transition-all duration-500 ${
+                          job.status === 'active' 
+                            ? 'bg-green-500 animate-pulse' 
+                            : job.status === 'completed' 
+                            ? 'bg-blue-600' 
+                            : 'bg-red-500'
+                        }`}
                         style={{ width: `${job.progress}%` }}
                       />
                     </div>
@@ -354,6 +389,48 @@ export const EthIndexerDashboard = () => {
                       <span>{job.progress}% complete</span>
                       <span>{formatJobTimestamp(job.timestamp, job.jobId)}</span>
                     </div>
+                    
+                    {job.status === 'active' && job.progress > 0 && (
+                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        <span>🔄 Processing transfers...</span>
+                      </div>
+                    )}
+                    
+                    {job.apiUrl && (
+                      <div className="mt-2 p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-xs">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <span className={`${job.apiStatus === 'ready' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`}>
+                              🔗 {job.apiStatus === 'ready' ? 'API Ready' : 'API Preparing'}: 
+                            </span>
+                            <a 
+                              href={job.apiUrl} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className={`${job.apiStatus === 'ready' ? 'text-green-800 dark:text-green-200' : 'text-blue-800 dark:text-blue-200'} hover:underline`}
+                            >
+                              {job.apiUrl}
+                            </a>
+                          </div>
+                          <button
+                            onClick={() => copyApiUrl(job.apiUrl!, job.jobId)}
+                            className={`ml-2 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                              copiedJobId === job.jobId
+                                ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200'
+                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                            }`}
+                            title="Copy API URL"
+                          >
+                            {copiedJobId === job.jobId ? '✓ Copied' : '📋 Copy'}
+                          </button>
+                        </div>
+                        {job.apiStatus === 'preparing' && (
+                          <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                            ⏳ API will be ready when indexing completes
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -366,6 +443,14 @@ export const EthIndexerDashboard = () => {
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
                 💸 Recent Transfers ({transfers.length})
               </h2>
+              <div className="flex gap-2">
+                <button
+                  onClick={fetchTransfers}
+                  className="text-sm px-3 py-1 bg-green-100 dark:bg-green-700 rounded-lg hover:bg-green-200 dark:hover:bg-green-600 transition-colors"
+                >
+                  🔄 Refresh Transfers
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3 max-h-96 overflow-y-auto">

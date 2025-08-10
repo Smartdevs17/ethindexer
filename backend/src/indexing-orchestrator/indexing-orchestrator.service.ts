@@ -4,6 +4,7 @@ import { IndexerService } from '../indexer/indexer.service';
 import { AiService, IndexingConfig } from '../ai/ai.service';
 import { ethers } from 'ethers';
 import { DynamicApiService } from '../api/dynamic-api.service';
+import { IndexerGateway } from '../websocket/indexer.gateway';
 import { IndexingJobResult } from './indexing-orchestrator.interface';
 
 
@@ -23,6 +24,7 @@ export class IndexingOrchestratorService {
     private readonly indexerService: IndexerService,
     private readonly aiService: AiService,
     private readonly dynamicApiService: DynamicApiService,
+    private readonly indexerGateway: IndexerGateway,
   ) {
     // 🔧 Validate addresses on startup
     this.validateTokenAddresses();
@@ -196,9 +198,18 @@ export class IndexingOrchestratorService {
             
             totalProcessed += processed;
             
-            // Update progress
+            // Update progress with more frequent updates
             const progress = (config.addresses.indexOf(address) + 1) / config.addresses.length * 100;
             await this.updateJobProgress(jobId, progress, totalProcessed);
+            
+            // Emit intermediate progress updates
+            this.indexerGateway.emitJobProgress({
+              jobId,
+              progress: Math.round(progress),
+              status: 'active',
+              message: `Indexed ${address.slice(0, 8)}... - ${totalProcessed} transfers processed`,
+              timestamp: new Date(),
+            });
             
           } catch (addressError) {
             this.logger.error(`❌ Failed to index ${address}:`, addressError);
@@ -226,6 +237,15 @@ export class IndexingOrchestratorService {
             
             const progress = (popularTokens.indexOf(token) + 1) / popularTokens.length * 100;
             await this.updateJobProgress(jobId, progress, totalProcessed);
+            
+            // Emit intermediate progress updates
+            this.indexerGateway.emitJobProgress({
+              jobId,
+              progress: Math.round(progress),
+              status: 'active',
+              message: `Indexed ${token.symbol || token.address.slice(0, 8)}... - ${totalProcessed} transfers processed`,
+              timestamp: new Date(),
+            });
             
           } catch (tokenError) {
             this.logger.error(`❌ Failed to index token ${token.symbol}:`, tokenError);
@@ -269,6 +289,15 @@ export class IndexingOrchestratorService {
       },
     });
 
+    // Emit WebSocket status update for real-time frontend updates
+    this.indexerGateway.emitJobProgress({
+      jobId,
+      progress: status === 'completed' ? 100 : 0,
+      status,
+      message: message || `Job status changed to ${status}`,
+      timestamp: new Date(),
+    });
+
     if (message) {
       this.logger.log(`📊 Job ${jobId}: ${message}`);
     }
@@ -285,6 +314,15 @@ export class IndexingOrchestratorService {
         blocksProcessed: processedRecords.toString(),
         updatedAt: new Date(),
       },
+    });
+
+    // Emit WebSocket progress update for real-time frontend updates
+    this.indexerGateway.emitJobProgress({
+      jobId,
+      progress: Math.round(progress),
+      status: 'active',
+      message: `Indexing in progress... ${Math.round(progress)}% complete (${processedRecords} records)`,
+      timestamp: new Date(),
     });
 
     this.logger.log(`📊 Job ${jobId}: ${Math.round(progress)}% complete (${processedRecords} records)`);

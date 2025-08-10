@@ -162,6 +162,21 @@ export class OrchestratorService {
 
       const config = job.config as any;
 
+      // Generate API URL immediately when job starts
+      const apiUrl = await this.generateApiUrl(config, job.query);
+      const description = this.generateDescription(config, job.query);
+      
+      // Emit API URL immediately to frontend
+      this.indexerGateway.emitApiCreated({
+        jobId: jobId,
+        path: apiUrl,
+        query: job.query,
+        description: description,
+        timestamp: new Date(),
+      });
+
+      this.logger.log(`🔗 Generated API URL for job ${jobId}: ${apiUrl}`);
+
       // Update job status to processing
       await this.updateJobProgress(jobId, 10, 'Processing configuration...');
 
