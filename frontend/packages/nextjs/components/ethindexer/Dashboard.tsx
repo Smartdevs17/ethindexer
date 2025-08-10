@@ -2,6 +2,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { APIUrlDisplay } from './APIUrlDisplay';
 import { useEthIndexer } from "../../hooks/ethindexer/useEthIndexer";
 import { EthIndexerAPI } from "../../services/api/api";
 import { ChatInterface } from "./chat/ChatInterface";
@@ -31,6 +32,8 @@ export const EthIndexerDashboard = () => {
   const [isCreatingJob, setIsCreatingJob] = useState(false);
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [showCompletedJobs, setShowCompletedJobs] = useState(false);
+  const [showAPIDisplay, setShowAPIDisplay] = useState(false);
+  const [lastCreatedJob, setLastCreatedJob] = useState<{jobId: string, query: string} | null>(null);
 
   // Chat UI toggle state
   const [activeInterface, setActiveInterface] = useState<"simple" | "chat">("simple");
@@ -67,17 +70,20 @@ export const EthIndexerDashboard = () => {
     try {
       const result = await createJob(queryToUse);
       console.log('✅ Dashboard job creation result:', result);
-      
+      // Show API URL when job is created
+      if (result && (result.jobId || result.result?.jobId)) {
+        const jobId = result.jobId || result.result?.jobId;
+        setLastCreatedJob({ jobId, query: queryToUse });
+        setShowAPIDisplay(true);
+      }
       // Clear input only if using simple interface
       if (!query) {
         setQueryInput('');
       }
-      
       // Force refresh after a short delay
       setTimeout(() => {
         forceRefreshJobs();
       }, 500);
-      
       return result;
     } catch (error) {
       console.error('❌ Dashboard job creation failed:', error);
@@ -233,6 +239,14 @@ export const EthIndexerDashboard = () => {
               >
                 {isCreatingJob ? "⏳ Creating..." : "🚀 Create Job"}
               </button>
+
+              {/* APIUrlDisplay block - shows after job creation */}
+              <APIUrlDisplay
+                jobId={lastCreatedJob?.jobId}
+                query={lastCreatedJob?.query}
+                show={showAPIDisplay}
+                onClose={() => setShowAPIDisplay(false)}
+              />
             </div>
 
             {/* Query Templates */}
