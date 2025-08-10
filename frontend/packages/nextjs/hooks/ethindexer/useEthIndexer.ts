@@ -229,26 +229,46 @@ export const useEthIndexer = () => {
       console.log('✅ Job creation response:', result);
       
       if (result.success) {
-        addDebugInfo(`✅ Job created: ${result.jobId || 'Unknown ID'}`);
-        
-        // Add job immediately to state with current timestamp
-        const newJob: Job = {
-          jobId: result.jobId || `temp-${Date.now()}`,
-          message: `Created: ${query.slice(0, 60)}...`,
-          progress: 0,
-          status: 'active',
-          timestamp: new Date(), // Use current time for immediate display
-        };
-        
-        setJobs(prev => [newJob, ...prev]);
-        
-        // Refresh jobs from API after a delay to get server timestamp
-        setTimeout(() => {
-          fetchJobs();
-          addDebugInfo('🔄 Refreshed jobs after creation');
-        }, 1000);
-        
-        return result;
+        // Check if this was served from cache
+        if (result.result?.cacheInfo) {
+          addDebugInfo(`✅ Data served from cache: ${result.result.cacheInfo.transferCount} transfers available`);
+          
+          // Create a "cache job" entry to show in the UI
+          const cacheJob: Job = {
+            jobId: `cache-${Date.now()}`,
+            message: `Served from cache: ${query.slice(0, 60)}... (${result.result.cacheInfo.transferCount} transfers)`,
+            progress: 100,
+            status: 'completed',
+            timestamp: new Date(),
+            apiUrl: result.result.apiUrl,
+            apiStatus: 'ready'
+          };
+          
+          setJobs(prev => [cacheJob, ...prev]);
+          
+          return result;
+        } else {
+          addDebugInfo(`✅ Job created: ${result.result?.jobId || 'Unknown ID'}`);
+          
+          // Add job immediately to state with current timestamp
+          const newJob: Job = {
+            jobId: result.result?.jobId || `temp-${Date.now()}`,
+            message: `Created: ${query.slice(0, 60)}...`,
+            progress: 0,
+            status: 'active',
+            timestamp: new Date(), // Use current time for immediate display
+          };
+          
+          setJobs(prev => [newJob, ...prev]);
+          
+          // Refresh jobs from API after a delay to get server timestamp
+          setTimeout(() => {
+            fetchJobs();
+            addDebugInfo('🔄 Refreshed jobs after creation');
+          }, 1000);
+          
+          return result;
+        }
       } else {
         throw new Error(result.error || 'Job creation failed');
       }
@@ -258,11 +278,11 @@ export const useEthIndexer = () => {
     }
   };
 
-  // FIXED: Fetch jobs with proper timestamp conversion
-  const fetchJobs = async () => {
+  // FIXED: Fetch jobs with proper timestamp conversion and pagination
+  const fetchJobs = async (limit = 50, offset = 0) => {
     try {
-      console.log('📡 Fetching jobs from API...');
-      const response = await fetch(`${apiUrl}/orchestrator/jobs`);
+      console.log(`📡 Fetching jobs from API (limit: ${limit}, offset: ${offset})...`);
+      const response = await fetch(`${apiUrl}/orchestrator/jobs?limit=${limit}&offset=${offset}`);
       
       if (response.ok) {
         const data = await response.json();
@@ -270,7 +290,7 @@ export const useEthIndexer = () => {
         
         // Convert jobs with proper timestamp handling and generate API URLs
         const jobsWithTimestamps = (data.jobs || []).map((job: any) => {
-          console.log(`🕐 Converting job ${job.jobId} timestamp:`, {
+          console.log(`🕐 Converting job ${job.id} timestamp:`, {
             original: job.timestamp,
             type: typeof job.timestamp,
             createdAt: job.createdAt,
@@ -313,6 +333,7 @@ export const useEthIndexer = () => {
           
           return {
             ...job,
+            jobId: job.id, // Map id to jobId for consistency
             // Try multiple timestamp fields and convert safely
             timestamp: safeTimestampToDate(
               job.timestamp || job.updatedAt || job.createdAt
@@ -324,19 +345,44 @@ export const useEthIndexer = () => {
             // Add generated API URL and status
             apiUrl: generatedApiUrl,
             apiStatus: apiStatus,
-            apiDescription: job.config?.originalQuery || job.message,
+            apiDescription: job.config?.originalQuery || job.query,
           };
         });
         
         console.log('✅ Jobs with converted timestamps and API URLs:', jobsWithTimestamps);
-        setJobs(jobsWithTimestamps);
-        addDebugInfo(`Fetched ${jobsWithTimestamps.length} jobs with timestamps and API URLs`);
+        
+        // If this is the first page (offset = 0), replace all jobs
+        // Otherwise, append new jobs to existing ones, avoiding duplicates
+        if (offset === 0) {
+          setJobs(jobsWithTimestamps);
+        } else {
+          setJobs(prev => {
+            // Create a map of existing job IDs for quick lookup
+            const existingJobIds = new Set(prev.map(job => job.jobId));
+            
+            // Filter out jobs that already exist
+            const newJobs = jobsWithTimestamps.filter((job: Job) => !existingJobIds.has(job.jobId));
+            
+            // Append only new jobs
+            return [...prev, ...newJobs];
+          });
+        }
+        
+        addDebugInfo(`Fetched ${jobsWithTimestamps.length} jobs (total: ${data.pagination?.total || 'unknown'})`);
+        
+        // Return pagination info for the frontend
+        return {
+          jobs: jobsWithTimestamps,
+          pagination: data.pagination,
+          summary: data.summary
+        };
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
       console.error('❌ Failed to fetch jobs:', error);
       addDebugInfo(`Job fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return { jobs: [], pagination: null, summary: null };
     }
   };
 

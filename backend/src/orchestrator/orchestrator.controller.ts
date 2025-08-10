@@ -70,7 +70,7 @@ export class OrchestratorController {
     const limitNum = parseInt(limit) || 20;
     const offsetNum = parseInt(offset) || 0;
 
-    const jobs = await this.orchestratorService.getAllJobs(limitNum, offsetNum);
+    const { jobs, total } = await this.orchestratorService.getAllJobs(limitNum, offsetNum);
     const activeJobsCount = await this.orchestratorService.getActiveJobsCount();
 
     return {
@@ -79,10 +79,12 @@ export class OrchestratorController {
       pagination: {
         limit: limitNum,
         offset: offsetNum,
-        total: jobs.length,
+        total: total,
+        hasMore: offsetNum + limitNum < total,
       },
       summary: {
         activeJobs: activeJobsCount,
+        totalJobs: total,
         totalReturned: jobs.length,
       },
       timestamp: new Date(),

@@ -33,7 +33,7 @@ export class OrchestratorService {
   ) {}
 
   /**
-   * Main orchestration method: Natural Language → AI → Job → Indexing
+   * Main orchestration method: Natural Language → AI → Smart Caching → Indexing
    */
   async executeAIQuery(query: string): Promise<any> {
     this.logger.log(`🚀 Executing AI query: "${query}"`);
@@ -49,7 +49,41 @@ export class OrchestratorService {
       const config = await this.aiService.parseNaturalLanguageQuery(query);
       this.logger.log(`🧠 AI parsed config:`, config);
 
-      // Step 2: Create indexing job
+      // Step 2: Check for recent data before creating new job
+      this.logger.log(`🔍 Checking for recent data before indexing...`);
+      const recentDataCheck = await this.checkForRecentData(config, query);
+      
+      if (recentDataCheck.hasRecentData) {
+        this.logger.log(`✅ Found recent data for query, serving from cache`);
+        this.logger.log(`📊 Cache info: ${recentDataCheck.transferCount} transfers, last indexed: ${recentDataCheck.lastIndexed}`);
+        
+        this.indexerGateway.emitSystemStatus({
+          message: `Serving data from recent cache (${recentDataCheck.transferCount} transfers)`,
+          stage: 'cache-hit',
+          timestamp: new Date(),
+        });
+
+        // Return cached data immediately
+        return {
+          success: true,
+          result: {
+            jobId: null,
+            message: 'Data served from recent cache',
+            config: config,
+            apiUrl: await this.generateApiUrl(config, query),
+            description: this.generateDescription(config, query),
+            cacheInfo: {
+              lastIndexed: recentDataCheck.lastIndexed,
+              transferCount: recentDataCheck.transferCount,
+              source: 'cache'
+            }
+          }
+        };
+      }
+
+      this.logger.log(`🔄 No recent data found, creating new indexing job`);
+
+      // Step 3: Create indexing job (only if no recent data)
       const job = await this.prisma.indexingJob.create({
         data: {
           query,
@@ -67,7 +101,7 @@ export class OrchestratorService {
 
       this.logger.log(`📋 Created job ${job.id}`);
 
-      // Step 3: Emit job creation event
+      // Step 4: Emit job creation event
       this.indexerGateway.emitJobProgress({
         jobId: job.id,
         progress: 0,
@@ -83,7 +117,7 @@ export class OrchestratorService {
         timestamp: new Date(),
       });
 
-      // Step 4: Start indexing in background
+      // Step 5: Start indexing in background
       this.startIndexingJob(job.id).catch((error) => {
         this.logger.error(`❌ Background indexing failed for job ${job.id}:`, error);
       });
@@ -109,6 +143,87 @@ export class OrchestratorService {
       });
 
       throw error;
+    }
+  }
+
+  /**
+   * Check for recent data to avoid duplicate indexing
+   */
+  private async checkForRecentData(config: any, query: string): Promise<{
+    hasRecentData: boolean;
+    lastIndexed?: Date;
+    transferCount?: number;
+  }> {
+    try {
+      // Define time window for "recent" data (1 hour)
+      const timeWindow = 60 * 60 * 1000; // 1 hour in milliseconds
+      const cutoffTime = new Date(Date.now() - timeWindow);
+
+      // Check if we have recent transfers for the requested token
+      let tokenAddress = null;
+      if (config.addresses && config.addresses.length > 0) {
+        tokenAddress = config.addresses[0].toLowerCase();
+      } else if (config.tokenSymbol) {
+        // Try to find token by symbol
+        const token = await this.prisma.token.findFirst({
+          where: { 
+            symbol: { 
+              equals: config.tokenSymbol, 
+              mode: 'insensitive' 
+            } 
+          }
+        });
+        if (token) {
+          tokenAddress = token.address.toLowerCase();
+        }
+      }
+
+      if (!tokenAddress) {
+        this.logger.log(`⚠️ No token address found for config:`, config);
+        return { hasRecentData: false };
+      }
+
+      // Check for recent transfers for this token
+      const recentTransfers = await this.prisma.transfer.findMany({
+        where: {
+          token: {
+            address: tokenAddress
+          },
+          timestamp: {
+            gte: cutoffTime
+          }
+        },
+        orderBy: {
+          timestamp: 'desc'
+        },
+        take: 1
+      });
+
+      if (recentTransfers.length > 0) {
+        // Get total count of transfers for this token
+        const totalTransfers = await this.prisma.transfer.count({
+          where: {
+            token: {
+              address: tokenAddress
+            }
+          }
+        });
+
+        this.logger.log(`✅ Found ${recentTransfers.length} recent transfers for ${tokenAddress}, total: ${totalTransfers}`);
+        
+        return {
+          hasRecentData: true,
+          lastIndexed: recentTransfers[0].timestamp,
+          transferCount: totalTransfers
+        };
+      }
+
+      this.logger.log(`🔄 No recent transfers found for ${tokenAddress}`);
+      return { hasRecentData: false };
+
+    } catch (error) {
+      this.logger.error(`❌ Error checking for recent data:`, error);
+      return { hasRecentData: false };
     }
   }
 
@@ -385,23 +500,30 @@ export class OrchestratorService {
   /**
    * Get all jobs with pagination
    */
-  async getAllJobs(limit = 20, offset = 0): Promise<JobStatus[]> {
+  async getAllJobs(limit = 20, offset = 0): Promise<{ jobs: JobStatus[], total: number }> {
+    // Get jobs with pagination
     const jobs = await this.prisma.indexingJob.findMany({
       take: limit,
       skip: offset,
       orderBy: { createdAt: 'desc' },
     });
 
-    return jobs.map(job => ({
-      id: job.id,
-      query: job.query,
-      status: job.status,
-      progress: job.progress,
-      createdAt: job.createdAt,
-      updatedAt: job.updatedAt,
-      completedAt: job.completedAt,
-      config: job.config,
-    }));
+    // Get total count
+    const total = await this.prisma.indexingJob.count();
+
+    return {
+      jobs: jobs.map(job => ({
+        id: job.id,
+        query: job.query,
+        status: job.status,
+        progress: job.progress,
+        createdAt: job.createdAt,
+        updatedAt: job.updatedAt,
+        completedAt: job.completedAt,
+        config: job.config,
+      })),
+      total
+    };
   }
 
   /**

@@ -63,6 +63,14 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
   private readonly logger = new Logger(IndexerGateway.name);
   private connectedClients = new Map<string, Socket>();
 
+  /**
+   * Lifecycle hook to ensure server is properly initialized
+   */
+  afterInit(server: Server) {
+    this.logger.log('🔌 WebSocket Gateway initialized successfully');
+    this.server = server;
+  }
+
   handleConnection(client: Socket) {
     this.logger.log(`🔌 Client connected: ${client.id}`);
     this.connectedClients.set(client.id, client);
@@ -145,15 +153,30 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
    */
   emitJobProgress(data: JobProgressEvent) {
     const room = `job-${data.jobId}`;
+    
+    // Check if server is properly initialized
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized');
+      return;
+    }
+    
     this.server.to(room).emit('job-progress', data);
     
     // Also emit to all clients for global updates
     this.server.emit('job-progress-global', data);
     
-    // ENHANCED LOGGING
+    // ENHANCED LOGGING with safe room size check
     this.logger.log(`📡 EMITTED job-progress-global: ${data.jobId.slice(0, 8)}... - ${data.progress}% - ${data.message}`);
     this.logger.log(`👥 Connected clients: ${this.connectedClients.size}`);
-    this.logger.log(`🏠 Room ${room} clients: ${this.server.sockets.adapter.rooms.get(room)?.size || 0}`);
+    
+    // Safe room size check
+    try {
+      const roomSize = this.server.sockets?.adapter?.rooms?.get(room)?.size || 0;
+      this.logger.log(`🏠 Room ${room} clients: ${roomSize}`);
+    } catch (error) {
+      this.logger.warn(`⚠️ Could not get room size for ${room}: ${error.message}`);
+    }
+    
     this.logger.log(`📊 Job progress: ${data.jobId} - ${data.progress}%`);
   }
 
@@ -161,6 +184,10 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
    * Emit new transfer events (real-time blockchain data)
    */
   emitNewTransfer(data: NewTransferEvent) {
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized for transfer emit');
+      return;
+    }
     this.server.emit('new-transfer', data);
     this.logger.log(`💰 New transfer: ${data.value} ${data.token.symbol || 'tokens'} - ${data.txHash.slice(0, 10)}...`);
   }
@@ -169,6 +196,10 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
    * Emit API creation events
    */
   emitApiCreated(data: ApiCreatedEvent) {
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized for API emit');
+      return;
+    }
     this.server.emit('api-created', data);
     this.logger.log(`🔗 New API created: ${data.path}`);
   }
@@ -177,6 +208,10 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
    * Emit system status updates
    */
   emitSystemStatus(data: SystemStatusEvent) {
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized for system status emit');
+      return;
+    }
     this.server.emit('system-status', data);
     this.logger.log(`📢 EMITTED system-status: ${data.stage} - ${data.message}`);
     this.logger.log(`🚀 System: ${data.message}`);
@@ -192,6 +227,10 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
     latestBlock: number;
     timestamp: Date;
   }) {
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized for stats emit');
+      return;
+    }
     this.server.emit('indexing-stats', data);
   }
 
@@ -204,6 +243,10 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
     networkId: number;
     timestamp: Date;
   }) {
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized for blockchain status emit');
+      return;
+    }
     this.server.emit('blockchain-status', data);
   }
 
@@ -220,6 +263,11 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
    * Send connection statistics to all clients
    */
   private sendConnectionStats() {
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized for connection stats');
+      return;
+    }
+    
     const stats = {
       connectedClients: this.connectedClients.size,
       timestamp: new Date(),
@@ -232,6 +280,10 @@ export class IndexerGateway implements OnGatewayConnection, OnGatewayDisconnect 
    * Broadcast message to all connected clients
    */
   broadcast(event: string, data: any) {
+    if (!this.server) {
+      this.logger.error('❌ WebSocket server not initialized for broadcast');
+      return;
+    }
     this.server.emit(event, data);
   }
 

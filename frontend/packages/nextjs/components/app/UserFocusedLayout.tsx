@@ -20,8 +20,8 @@ export const UserFocusedLayout: React.FC<UserFocusedLayoutProps> = ({ children }
     .filter(job => job.apiUrl && job.status === 'completed')
     .map(job => ({
       id: job.jobId,
-      title: `${job.jobId.slice(0, 8)}... API`,
-      description: `Generated from: ${job.message?.slice(0, 60)}...`,
+      title: `${job.jobId?.slice(0, 8) || 'Unknown'}... API`,
+      description: `Generated from: ${(job.message || 'Unknown query')?.slice(0, 60)}...`,
       url: job.apiUrl,
       query: job.message || 'Unknown query',
       status: 'ready',
