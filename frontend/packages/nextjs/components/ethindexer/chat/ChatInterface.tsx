@@ -1,7 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ChatMessage } from "./ChatMessage";
-import { SmartChatInput } from "./SmartChatInput";
-import { WelcomeMessage } from "./WelcomeMessage";
+import { Send, Bot, User, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 
 export interface Message {
   id: string;
@@ -17,11 +15,6 @@ export interface Message {
   };
 }
 
-interface ConversationMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
 interface ChatInterfaceProps {
   onExecuteQuery: (query: string) => Promise<any>;
   isProcessing?: boolean;
@@ -34,10 +27,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   systemStatus,
 }) => {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [conversationHistory, setConversationHistory] = useState<ConversationMessage[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3001";
 
@@ -57,17 +49,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     return newMessage;
   };
 
-  // Update conversation history
-  const updateConversationHistory = (userMessage: string, assistantMessage: string) => {
-    setConversationHistory((prev) =>
-      [
-        ...prev,
-        { role: "user" as const, content: userMessage },
-        { role: "assistant" as const, content: assistantMessage },
-      ].slice(-10)
-    ); // Keep last 10 exchanges for context
-  };
-
   // Send message to chat backend
   const sendChatMessage = async (message: string) => {
     try {
@@ -78,7 +59,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
         body: JSON.stringify({
           message,
-          conversationHistory,
+          conversationHistory: [],
         }),
       });
 
@@ -99,27 +80,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  // Handle user input with backend integration
+  // Handle user input
   const handleUserMessage = async (content: string) => {
+    if (!content.trim()) return;
+
     // Add user message immediately
     addMessage({
       type: "user",
       content,
     });
 
-    // Show typing indicator
+    setInputValue("");
     setIsTyping(true);
 
     try {
       // Send to chat backend
       const chatResponse = await sendChatMessage(content);
-      console.log("🤖 Chat backend response:", chatResponse);
-
-      // Debug logging
-      console.log("🔍 Debug check:");
-      console.log("  - isQueryReady:", chatResponse.isQueryReady);
-      console.log("  - suggestedQuery:", chatResponse.suggestedQuery);
-      console.log("  - confidence:", chatResponse.confidence);
 
       // Add assistant response message
       addMessage({
@@ -132,38 +108,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         },
       });
 
-      // Update conversation history
-      updateConversationHistory(content, chatResponse.message);
-
       // If the query is ready to execute, proceed with job creation
       if (chatResponse.isQueryReady && chatResponse.suggestedQuery) {
-        console.log("✅ EXECUTING QUERY - conditions met!");
-        console.log("  - chatResponse.isQueryReady =", chatResponse.isQueryReady);
-        console.log("  - chatResponse.suggestedQuery =", chatResponse.suggestedQuery);
         try {
           // Small delay for better UX
           await new Promise((resolve) => setTimeout(resolve, 1000));
 
-          console.log("🚀 About to call onExecuteQuery with:", chatResponse.suggestedQuery);
           const result = await onExecuteQuery(chatResponse.suggestedQuery);
-          console.log("📊 onExecuteQuery returned:", result);
 
-          // Handle different response structures from your orchestrator
+          // Handle different response structures
           let jobId = null;
           let config = null;
 
           if (result && result.result && result.result.jobId) {
-            // Nested structure: { success: true, result: { jobId: "...", config: {...} } }
             jobId = result.result.jobId;
             config = result.result.config;
           } else if (result && result.jobId) {
-            // Direct structure: { jobId: "...", config: {...} }
             jobId = result.jobId;
             config = result.config;
           }
 
           if (jobId) {
-            // Add success message
             addMessage({
               type: "system",
               content: `✅ Successfully created indexing job! Job ID: ${jobId}`,
@@ -173,7 +138,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               },
             });
           } else {
-            console.warn("⚠️ No jobId found in orchestrator result:", result);
             addMessage({
               type: "system",
               content: "✅ Job created successfully!",
@@ -189,10 +153,6 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
             }`,
           });
         }
-      } else {
-        console.log("❌ NOT executing query:");
-        console.log("  - isQueryReady:", chatResponse.isQueryReady);
-        console.log("  - suggestedQuery exists:", !!chatResponse.suggestedQuery);
       }
     } catch (error) {
       console.error("❌ Chat error:", error);
@@ -210,28 +170,20 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  // Handle direct query execution (for welcome message buttons)
+  // Handle direct query execution
   const handleDirectQuery = async (query: string) => {
     try {
-      // Add user message for the query
       addMessage({
         type: "user",
         content: query,
       });
 
-      // Add system message explaining what we're doing
-      const tokenMatch = query.match(/(USDC|USDT|WETH|DAI|LINK)/i);
-      const tokens = tokenMatch ? tokenMatch.length : 0;
-
       addMessage({
         type: "system",
-        content: `I'll help you index ${tokens > 1 ? "those" : "that token"} transfers for you. Creating the indexing job now...`,
+        content: `Creating indexing job for: ${query}`,
       });
 
-      // Execute the query
       const result = await onExecuteQuery(query);
-
-      // Handle the result
       const jobId = result?.jobId || result?.result?.jobId;
 
       if (jobId) {
@@ -261,68 +213,123 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
   };
 
-  // Get contextual help based on conversation
-  const getContextualHelp = () => {
-    if (messages.length === 0) {
-      return "Which token would you like to track? For example:\n\n• USDC transfers\n• USDT transfers\n• WETH transfers\n• Or provide a contract address (0x...)";
-    }
-
-    const lastMessage = messages[messages.length - 1];
-    if (lastMessage.content.toLowerCase().includes("token")) {
-      return "What would you like me to do with this token? For example:\n\n• Index all transfers\n• Track transfers for a specific address\n• Monitor transfers above a certain value";
-    }
-
-    if (lastMessage.content.toLowerCase().includes("transfer")) {
-      return "Would you like to specify a block range? For example:\n\n• From the latest 1000 blocks\n• From block 18000000 to latest\n• Just say 'latest' for ongoing monitoring";
-    }
-
-    return "Would you like to specify a block range? For example:\n\n• From the latest 1000 blocks\n• From block 18000000 to latest\n• Just say 'latest' for ongoing monitoring";
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleUserMessage(inputValue);
   };
 
+  const quickActions = [
+    "Index USDC transfers from the last 1000 blocks",
+    "Track WETH transfers above $10,000",
+    "Monitor USDT transfers for specific address",
+    "Index DAI transfers from recent blocks"
+  ];
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-white dark:bg-gray-800">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-        <div className="flex items-center justify-between">
+      <div className="flex-shrink-0 p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center space-x-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+            <Bot className="h-6 w-6 text-white" />
+          </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">EthIndexer AI Assistant</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Ready to help you index blockchain data</p>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              AI Assistant
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Describe what blockchain data you want to track
+            </p>
           </div>
         </div>
       </div>
 
       {/* Messages Area */}
       <div className="flex-1 overflow-hidden">
-        <div
-          ref={chatContainerRef}
-          className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0"
-        >
+        <div className="h-full overflow-y-auto p-6 space-y-4">
           {/* Welcome Message */}
           {messages.length === 0 && (
-            <WelcomeMessage onQuickAction={handleDirectQuery} />
+            <div className="space-y-6">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Bot className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+                  Welcome to EthIndexer AI
+                </h3>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  I can help you create custom APIs for blockchain data. Just tell me what you want to track!
+                </p>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Quick Actions:
+                </p>
+                <div className="grid gap-3">
+                  {quickActions.map((action, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleDirectQuery(action)}
+                      disabled={isProcessing || isTyping}
+                      className="text-left p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border border-gray-200 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <p className="text-sm text-gray-900 dark:text-white font-medium">
+                        {action}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
 
           {/* Chat Messages */}
           {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
+            <div
+              key={message.id}
+              className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                  message.type === "user"
+                    ? "bg-blue-600 text-white"
+                    : message.type === "system"
+                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800"
+                    : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white"
+                }`}
+              >
+                <div className="flex items-start space-x-2">
+                  {message.type === "user" ? (
+                    <User className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  ) : message.type === "system" ? (
+                    <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  ) : (
+                    <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  )}
+                  <div className="flex-1">
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    {message.metadata?.jobId && (
+                      <p className="text-xs opacity-75 mt-1">
+                        Job ID: {message.metadata.jobId}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
           ))}
 
           {/* Typing Indicator */}
           {isTyping && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-2 max-w-xs">
-                <div className="flex items-center space-x-1">
-                  <span className="text-sm text-gray-600 dark:text-gray-300">AI is analyzing your request</span>
-                  <div className="flex space-x-1">
-                    <div
-                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "0.1s" }}
-                    />
-                    <div
-                      className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
-                      style={{ animationDelay: "0.2s" }}
-                    />
-                  </div>
+              <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-3 max-w-xs">
+                <div className="flex items-center space-x-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    AI is analyzing your request...
+                  </span>
                 </div>
               </div>
             </div>
@@ -333,11 +340,26 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="flex-shrink-0">
-        <SmartChatInput
-          onSendMessage={handleUserMessage}
-          disabled={isProcessing || isTyping}
-        />
+      <div className="flex-shrink-0 p-6 border-t border-gray-200 dark:border-gray-700">
+        <form onSubmit={handleSubmit} className="flex space-x-3">
+          <div className="flex-1 relative">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              placeholder="Describe what blockchain data you want to track..."
+              disabled={isProcessing || isTyping}
+              className="w-full px-4 py-3 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!inputValue.trim() || isProcessing || isTyping}
+            className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </form>
       </div>
     </div>
   );

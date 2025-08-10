@@ -1,27 +1,46 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Play, Sparkles, Zap, MessageSquare } from 'lucide-react';
+import { Play, Sparkles, Zap, MessageSquare, CheckCircle, ArrowRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEthIndexer } from '../../../hooks/ethindexer/useEthIndexer';
+import { ChatInterface } from '../../../components/ethindexer/chat/ChatInterface';
 
 export default function QueryBuilderPage() {
   const [queryInput, setQueryInput] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [createdAPI, setCreatedAPI] = useState<any>(null);
   const [activeInterface, setActiveInterface] = useState<'simple' | 'chat'>('simple');
   
   const { createJob } = useEthIndexer();
+  const router = useRouter();
 
   const handleCreateAPI = async () => {
     if (!queryInput.trim()) return;
     
     setIsCreating(true);
+    setShowSuccess(false);
+    
     try {
-      await createJob(queryInput);
+      const result = await createJob(queryInput);
+      
+      // Show success state
+      setCreatedAPI({
+        query: queryInput,
+        jobId: result.result?.jobId || result.jobId || 'Processing...'
+      });
+      setShowSuccess(true);
       setQueryInput('');
-      // Show success message or redirect to APIs page
+      
+      // Auto-redirect to APIs page after 3 seconds
+      setTimeout(() => {
+        router.push('/app/apis');
+      }, 3000);
+      
     } catch (error) {
       console.error('Failed to create API:', error);
-      // Show error message
+      alert('Failed to create API. Please try again.');
     } finally {
       setIsCreating(false);
     }
@@ -36,7 +55,7 @@ export default function QueryBuilderPage() {
 
   const exampleQueries = [
     "Index USDC transfers from the last 1000 blocks",
-    "Track my wallet's transactions",
+    "Track my wallet's transactions", 
     "Index WETH transfers above $10,000",
     "Monitor DeFi token swaps",
     "Track NFT marketplace activity",
@@ -55,7 +74,7 @@ export default function QueryBuilderPage() {
     {
       title: "Popular Tokens",
       description: "Index transfers for USDC, WETH, and other major tokens",
-      query: "Index USDC and WETH transfers from recent blocks",
+      query: "Index USDC transfers from recent blocks",
       icon: "🏆"
     },
     {
@@ -72,12 +91,72 @@ export default function QueryBuilderPage() {
     }
   ];
 
+  // Success State
+  if (showSuccess && createdAPI) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center">
+          <div className="mb-6">
+            <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">API Created Successfully!</h2>
+            <p className="text-gray-600 dark:text-gray-400">Your blockchain data endpoint is being generated</p>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-8 max-w-2xl mx-auto">
+            <div className="space-y-4">
+              <div className="flex items-center justify-center gap-3">
+                <div className="animate-spin h-6 w-6 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                <span className="text-lg font-medium text-gray-900 dark:text-white">Processing your request...</span>
+              </div>
+              
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+                <h3 className="font-medium text-blue-900 dark:text-blue-300 mb-2">Your Query:</h3>
+                <p className="text-blue-800 dark:text-blue-400">"{createdAPI.query}"</p>
+              </div>
+              
+              <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
+                <p>✅ Query parsed by AI</p>
+                <p>🔄 Indexing blockchain data</p>
+                <p>⏳ Generating your API endpoint</p>
+              </div>
+              
+              <div className="pt-4 space-y-3">
+                <button
+                  onClick={() => router.push('/app/apis')}
+                  className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors"
+                >
+                  View Your APIs
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setShowSuccess(false);
+                    setCreatedAPI(null);
+                  }}
+                  className="w-full text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
+                >
+                  Create Another API
+                </button>
+              </div>
+            </div>
+          </div>
+          
+          <div className="text-sm text-gray-500 dark:text-gray-400 mt-4">
+            Redirecting to your APIs in <span className="font-mono">3</span> seconds...
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Main Interface
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="text-center">
         <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Create Your API</h2>
-        <p className="text-gray-600 dark:text-gray-300">Describe what blockchain data you want to track in plain English</p>
+        <p className="text-gray-600 dark:text-gray-400">Describe what blockchain data you want to track in plain English</p>
       </div>
 
       {/* Interface Toggle */}
@@ -88,7 +167,7 @@ export default function QueryBuilderPage() {
             className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
               activeInterface === 'simple'
                 ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
             <Sparkles className="inline h-4 w-4 mr-2" />
@@ -99,7 +178,7 @@ export default function QueryBuilderPage() {
             className={`px-6 py-2 rounded-md text-sm font-medium transition-colors ${
               activeInterface === 'chat'
                 ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
             <MessageSquare className="inline h-4 w-4 mr-2" />
@@ -122,7 +201,7 @@ export default function QueryBuilderPage() {
                   onChange={(e) => setQueryInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="e.g., Index USDC transfers from the last 1000 blocks"
-                  className="w-full px-4 py-4 text-lg text-gray-900 dark:text-white bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none placeholder-gray-500 dark:placeholder-gray-400"
+                  className="w-full px-4 py-4 text-lg border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
                   rows={3}
                   disabled={isCreating}
                 />
@@ -155,6 +234,7 @@ export default function QueryBuilderPage() {
                     key={index}
                     onClick={() => setQueryInput(action.query)}
                     className="text-left p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border border-gray-200 dark:border-gray-600 group"
+                    disabled={isCreating}
                   >
                     <div className="flex items-start space-x-3">
                       <span className="text-2xl">{action.icon}</span>
@@ -162,7 +242,7 @@ export default function QueryBuilderPage() {
                         <h3 className="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">
                           {action.title}
                         </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">{action.description}</p>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">{action.description}</p>
                       </div>
                     </div>
                   </button>
@@ -178,7 +258,8 @@ export default function QueryBuilderPage() {
                   <button
                     key={index}
                     onClick={() => setQueryInput(example)}
-                    className="px-3 py-2 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors border border-blue-200 dark:border-blue-700"
+                    disabled={isCreating}
+                    className="px-3 py-2 text-sm bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors border border-blue-200 dark:border-blue-700 disabled:opacity-50"
                   >
                     {example}
                   </button>
@@ -188,49 +269,38 @@ export default function QueryBuilderPage() {
           </div>
         </div>
       ) : (
-        /* Chat Interface */
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 h-[600px]">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center">
-              <Zap className="h-5 w-5 text-blue-600 mr-2" />
-              AI Assistant
-            </h3>
-            <p className="text-gray-600 dark:text-gray-300 text-sm">Have a conversation to build your perfect API</p>
-          </div>
-          
-          <div className="p-6 h-full flex items-center justify-center text-gray-500 dark:text-gray-400">
-            <div className="text-center">
-              <MessageSquare className="h-12 w-12 mx-auto mb-4 text-gray-400 dark:text-gray-500" />
-              <p>Chat interface coming soon...</p>
-              <p className="text-sm mt-2">Use the Simple Input above for now</p>
-            </div>
-          </div>
+          <ChatInterface
+            onExecuteQuery={handleCreateAPI}
+            isProcessing={isCreating}
+            systemStatus="Ready"
+          />
         </div>
       )}
 
       {/* Info Section */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
-        <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">How it works</h3>
+      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-700">
+        <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-300 mb-2">How it works</h3>
         <div className="grid md:grid-cols-3 gap-4 text-sm">
           <div className="flex items-start space-x-3">
             <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">1</div>
             <div>
-              <p className="font-medium text-blue-900 dark:text-blue-100">Describe your data</p>
-              <p className="text-blue-700 dark:text-blue-300">Tell us what blockchain data you want to track</p>
+              <p className="font-medium text-blue-900 dark:text-blue-300">Describe your data</p>
+              <p className="text-blue-700 dark:text-blue-400">Tell us what blockchain data you want to track</p>
             </div>
           </div>
           <div className="flex items-start space-x-3">
             <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">2</div>
             <div>
-              <p className="font-medium text-blue-900 dark:text-blue-100">AI generates your API</p>
-              <p className="text-blue-700 dark:text-blue-300">Our AI creates a custom endpoint for your data</p>
+              <p className="font-medium text-blue-900 dark:text-blue-300">AI generates your API</p>
+              <p className="text-blue-700 dark:text-blue-400">Our AI creates a custom endpoint for your data</p>
             </div>
           </div>
           <div className="flex items-start space-x-3">
             <div className="w-6 h-6 bg-blue-600 text-white rounded-full flex items-center justify-center text-xs font-bold">3</div>
             <div>
-              <p className="font-medium text-blue-900 dark:text-blue-100">Use your API</p>
-              <p className="text-blue-700 dark:text-blue-300">Copy the URL and start getting live blockchain data</p>
+              <p className="font-medium text-blue-900 dark:text-blue-300">Use your API</p>
+              <p className="text-blue-700 dark:text-blue-400">Copy the URL and start getting live blockchain data</p>
             </div>
           </div>
         </div>
