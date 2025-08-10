@@ -33,7 +33,7 @@ export const EthIndexerDashboard = () => {
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [showCompletedJobs, setShowCompletedJobs] = useState(false);
   const [showAPIDisplay, setShowAPIDisplay] = useState(false);
-  const [lastCreatedJob, setLastCreatedJob] = useState<{jobId: string, query: string} | null>(null);
+  const [lastCreatedJob, setLastCreatedJob] = useState<{jobId: string, query: string, config?: any} | null>(null);
 
   // Chat UI toggle state
   const [activeInterface, setActiveInterface] = useState<"simple" | "chat">("simple");
@@ -73,7 +73,8 @@ export const EthIndexerDashboard = () => {
       // Show API URL when job is created
       if (result && (result.jobId || result.result?.jobId)) {
         const jobId = result.jobId || result.result?.jobId;
-        setLastCreatedJob({ jobId, query: queryToUse });
+        const config = result.config || result.result?.config;
+        setLastCreatedJob({ jobId, query: queryToUse, config });
         setShowAPIDisplay(true);
       }
       // Clear input only if using simple interface
@@ -244,6 +245,7 @@ export const EthIndexerDashboard = () => {
               <APIUrlDisplay
                 jobId={lastCreatedJob?.jobId}
                 query={lastCreatedJob?.query}
+                config={lastCreatedJob?.config}
                 show={showAPIDisplay}
                 onClose={() => setShowAPIDisplay(false)}
               />

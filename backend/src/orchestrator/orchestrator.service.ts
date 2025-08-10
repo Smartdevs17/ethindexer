@@ -35,7 +35,7 @@ export class OrchestratorService {
   /**
    * Main orchestration method: Natural Language → AI → Job → Indexing
    */
-  async executeAIQuery(query: string): Promise<JobCreationResult> {
+  async executeAIQuery(query: string): Promise<any> {
     this.logger.log(`🚀 Executing AI query: "${query}"`);
 
     try {
@@ -88,10 +88,15 @@ export class OrchestratorService {
         this.logger.error(`❌ Background indexing failed for job ${job.id}:`, error);
       });
 
+      // Return with API URL and description
       return {
-        jobId: job.id,
-        config,
-        message: 'Job created and indexing started',
+        result: {
+          jobId: job.id,
+          message: 'Indexing job created successfully',
+          config: config,
+          apiUrl: await this.generateApiUrl(config, query),
+          description: this.generateDescription(config, query)
+        }
       };
 
     } catch (error) {
@@ -104,6 +109,39 @@ export class OrchestratorService {
       });
 
       throw error;
+    }
+  }
+
+  /**
+   * Generate API URL based on indexing config
+   */
+  private async generateApiUrl(config: any, query: string): Promise<string> {
+    let endpointName = 'transfers';
+    if (config.tokenSymbol) {
+      endpointName = `${config.tokenSymbol.toLowerCase()}-transfers`;
+    } else if (config.addresses && config.addresses.length === 1) {
+      const address = config.addresses[0];
+      // Try to get token symbol from database
+      const token = await this.prisma.token.findUnique({
+        where: { address: address.toLowerCase() }
+      });
+      if (token) {
+        endpointName = `${token.symbol.toLowerCase()}-transfers`;
+      }
+    }
+    return `/api/${endpointName}`;
+  }
+
+  /**
+   * Generate human-readable description
+   */
+  private generateDescription(config: any, query: string): string {
+    if (config.tokenSymbol) {
+      return `${config.tokenSymbol} transfer data`;
+    } else if (config.addresses && config.addresses.length === 1) {
+      return `Transfer data for token ${config.addresses[0].slice(0, 6)}...`;
+    } else {
+      return `Transfer data from query: ${query}`;
     }
   }
 

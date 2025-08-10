@@ -3,16 +3,20 @@
 import React, { useState } from 'react';
 import { Copy, Check, ExternalLink } from 'lucide-react';
 
+
 interface APIUrlDisplayProps {
   jobId?: string;
   query?: string;
+  config?: any; // Add config from job creation
   show: boolean;
   onClose?: () => void;
 }
 
+
 export const APIUrlDisplay: React.FC<APIUrlDisplayProps> = ({ 
   jobId, 
   query, 
+  config, // Add this prop
   show,
   onClose 
 }) => {
@@ -21,11 +25,12 @@ export const APIUrlDisplay: React.FC<APIUrlDisplayProps> = ({
   if (!show || !jobId) return null;
 
   const baseUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-  const apiUrl = `${baseUrl}/api/transfers?jobId=${jobId}`;
+  // Generate multiple working API URLs based on your existing endpoints
+  const apiUrls = generateWorkingApiUrls(baseUrl, config, query || "");
 
-  const copyToClipboard = async () => {
+  const copyToClipboard = async (url: string) => {
     try {
-      await navigator.clipboard.writeText(apiUrl);
+      await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
@@ -33,23 +38,14 @@ export const APIUrlDisplay: React.FC<APIUrlDisplayProps> = ({
     }
   };
 
-  const openInNewTab = () => {
-    window.open(apiUrl, '_blank');
-  };
-
   return (
     <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 mb-4">
       <div className="flex justify-between items-start mb-4">
         <h3 className="text-lg font-semibold text-green-800 dark:text-green-200">
-          ✅ API Generated Successfully!
+          ✅ Indexing Started! Your APIs are ready:
         </h3>
         {onClose && (
-          <button 
-            onClick={onClose}
-            className="text-green-600 hover:text-green-800 dark:text-green-400"
-          >
-            ✕
-          </button>
+          <button onClick={onClose} className="text-green-600 hover:text-green-800 dark:text-green-400">✕</button>
         )}
       </div>
 
@@ -59,46 +55,84 @@ export const APIUrlDisplay: React.FC<APIUrlDisplayProps> = ({
         </p>
       )}
 
-      <div className="space-y-3">
-        <div>
-          <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-2">
-            Your API Endpoint:
-          </p>
-          <div className="flex items-center gap-2 p-3 bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700 rounded-lg">
-            <code className="flex-1 text-sm font-mono text-gray-800 dark:text-gray-200 break-all">
-              {apiUrl}
-            </code>
-            <button
-              onClick={copyToClipboard}
-              className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
-              title="Copy URL"
-            >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? 'Copied!' : 'Copy'}
-            </button>
-            <button
-              onClick={openInNewTab}
-              className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 transition-colors"
-              title="Open in new tab"
-            >
-              <ExternalLink className="h-4 w-4" />
-              Test
-            </button>
+      <div className="space-y-4">
+        {apiUrls.map((api, index) => (
+          <div key={index} className="space-y-2">
+            <p className="text-sm font-medium text-green-800 dark:text-green-200">
+              {api.title}:
+            </p>
+            <div className="flex items-center gap-2 p-3 bg-white dark:bg-gray-800 border border-green-200 dark:border-green-700 rounded-lg">
+              <code className="flex-1 text-sm font-mono text-gray-800 dark:text-gray-200 break-all">
+                {api.url}
+              </code>
+              <button
+                onClick={() => copyToClipboard(api.url)}
+                className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition-colors"
+                title="Copy URL"
+              >
+                <Copy className="h-4 w-4" />
+                Copy
+              </button>
+              <button
+                onClick={() => window.open(api.url, '_blank')}
+                className="flex items-center gap-1 px-3 py-1 bg-gray-600 text-white rounded text-sm hover:bg-gray-700 transition-colors"
+                title="Test API"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Test
+              </button>
+            </div>
           </div>
-        </div>
+        ))}
 
-        <div className="text-sm text-green-700 dark:text-green-300">
+        <div className="text-sm text-green-700 dark:text-green-300 mt-4">
           <p><strong>💡 Usage Examples:</strong></p>
           <div className="mt-2 space-y-1 text-xs font-mono bg-green-100 dark:bg-green-900/40 p-3 rounded">
-            <div>curl "{apiUrl}"</div>
-            <div>fetch("{apiUrl}").then(r ={'>'} r.json())</div>
+            <div>curl "{apiUrls[0]?.url}"</div>
+            <div>{`fetch("${apiUrls[0]?.url}").then(r => r.json())`}</div>
           </div>
         </div>
 
         <div className="text-xs text-green-600 dark:text-green-400">
-          <p>🔄 This API will update automatically as new blockchain data is indexed</p>
+          <p>🔄 These APIs are live and update automatically as indexing progresses</p>
         </div>
       </div>
     </div>
   );
 };
+
+// HELPER FUNCTION: Generate working API URLs based on your existing endpoints
+function generateWorkingApiUrls(baseUrl: string, config: any, query: string) {
+  const urls = [];
+
+  // Main transfers endpoint (always works)
+  urls.push({
+    title: "All Transfers",
+    url: `${baseUrl}/api/transfers?limit=100`
+  });
+
+  // If specific token address was indexed
+  if (config?.addresses && config.addresses.length > 0) {
+    const address = config.addresses[0];
+    urls.push({
+      title: "Transfers for this Token",
+      url: `${baseUrl}/api/transfers?token=${address}&limit=100`
+    });
+  }
+
+  // If block range was specified
+  if (config?.fromBlock) {
+    urls.push({
+      title: "Transfers from Block Range",
+      url: `${baseUrl}/api/transfers?fromBlock=${config.fromBlock}&limit=100`
+    });
+  }
+
+  // Recent transfers (always useful)
+  urls.push({
+    title: "Recent Transfers",
+    url: `${baseUrl}/api/transfers/recent?limit=50`
+  });
+
+  return urls;
+}
