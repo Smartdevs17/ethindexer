@@ -7,7 +7,7 @@ import { Copy, Check, ExternalLink } from 'lucide-react';
 interface APIUrlDisplayProps {
   jobId?: string;
   query?: string;
-  config?: any; // Add config from job creation
+  config?: any;
   show: boolean;
   onClose?: () => void;
 }
@@ -16,7 +16,7 @@ interface APIUrlDisplayProps {
 export const APIUrlDisplay: React.FC<APIUrlDisplayProps> = ({ 
   jobId, 
   query, 
-  config, // Add this prop
+  config,
   show,
   onClose 
 }) => {

@@ -59,11 +59,12 @@ export class DynamicApiService {
       // Generate endpoint configuration
       const endpointConfig = await this.createEndpointConfig(config, job);
       
-      // Store in database
-      await this.storeApiEndpoint(endpointConfig, config);
-      
-      this.logger.log(`✅ Generated API endpoint: ${endpointConfig.path}`);
-      return endpointConfig;
+  // Store in database
+  await this.storeApiEndpoint(endpointConfig, config);
+  // Also create API endpoint and emit websocket event with jobId
+  await this.createApiEndpoint(jobId, endpointConfig.path, config.originalQuery, endpointConfig.sqlQuery);
+  this.logger.log(`✅ Generated API endpoint: ${endpointConfig.path}`);
+  return endpointConfig;
 
     } catch (error) {
       this.logger.error(`❌ Failed to generate API for job ${jobId}:`, error);
@@ -456,7 +457,7 @@ export class DynamicApiService {
 /**
  * 📄 Create a new API endpoint
  */
-  async createApiEndpoint(path: string, query: string, sqlQuery: string): Promise<void> {
+  async createApiEndpoint(jobId: string, path: string, query: string, sqlQuery: string): Promise<void> {
     // Create the API endpoint in database
     const endpoint = await this.prisma.apiEndpoint.create({
       data: {
@@ -470,6 +471,7 @@ export class DynamicApiService {
 
     // 🚀 EMIT WEBSOCKET EVENT FOR NEW API
     this.indexerGateway.emitApiCreated({
+      jobId: jobId,
       path: endpoint.path,
       query: endpoint.query,
       description: endpoint.description,

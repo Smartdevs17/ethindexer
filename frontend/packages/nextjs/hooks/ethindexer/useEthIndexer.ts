@@ -8,6 +8,8 @@ interface Job {
   progress: number;
   status: string;
   timestamp: Date;
+   apiUrl?: string;
+  apiDescription?: string;
 }
 
 interface Transfer {
@@ -87,7 +89,7 @@ export const useEthIndexer = () => {
   const [connectedClients, setConnectedClients] = useState(0);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   // Helper function to add debug messages
   const addDebugInfo = (message: string) => {
@@ -119,6 +121,32 @@ export const useEthIndexer = () => {
       console.log('🚀 System Status:', data);
       setSystemStatus(`${data.message} (${data.stage})`);
       addDebugInfo(`System: ${data.message}`);
+    });
+
+    // API created event handling
+    newSocket.on('api-created', (data: any) => {
+      console.log('🔗 API Created:', data);
+      addDebugInfo(`New API created: ${data.path}`);
+      
+      // Update job with API URL when it's generated
+      if (data.jobId) {
+        console.log(`🔗 Linking API ${data.path} to job ${data.jobId}`);
+        
+        setJobs(prev => prev.map(job => {
+          if (job.jobId === data.jobId) {
+            console.log(`✅ Updated job ${data.jobId} with API URL: ${data.path}`);
+            return { 
+              ...job, 
+              apiUrl: data.path,
+              apiDescription: data.description,
+              status: 'completed' // Mark as completed when API is ready
+            };
+          }
+          return job;
+        }));
+        
+        addDebugInfo(`✅ Job ${data.jobId} → API: ${data.path}`);
+      }
     });
 
     // Job progress updates with timestamp debugging

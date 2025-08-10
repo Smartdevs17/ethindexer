@@ -35,6 +35,7 @@ export interface NewTransferEvent {
 }
 
 export interface ApiCreatedEvent {
+  jobId: string;
   path: string;
   query: string;
   description?: string;
