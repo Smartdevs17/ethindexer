@@ -128,10 +128,10 @@ function generateWorkingApiUrls(baseUrl: string, config: any, query: string) {
     });
   }
 
-  // Recent transfers (always useful)
+  // Recent transfers using the working endpoint
   urls.push({
     title: "Recent Transfers",
-    url: `${baseUrl}/api/transfers/recent?limit=50`
+    url: `${baseUrl}/api/transfers?limit=50&sortBy=timestamp&sortOrder=DESC`
   });
 
   return urls;
