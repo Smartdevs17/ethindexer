@@ -7,58 +7,20 @@ import { useEthIndexer } from '../../../hooks/ethindexer/useEthIndexer';
 import { RainbowKitCustomConnectButton } from '../../../components/scaffold-eth';
 
 export default function MyAPIsPage() {
+  // ALL HOOKS MUST BE CALLED AT THE TOP LEVEL - BEFORE ANY CONDITIONAL RETURNS
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
   const { isConnected } = useAccount();
   const { jobs, isConnected: isBackendConnected, fetchJobs, isAuthenticated } = useEthIndexer();
   
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
-  // Show wallet connection requirement if not connected
-  if (!isConnected) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
-          <p className="text-gray-600 dark:text-gray-300">Connect your wallet to view your indexing APIs</p>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-          <Wallet className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Wallet Connection Required</h3>
-          <p className="text-gray-600 dark:text-gray-300 mb-6">
-            Connect your wallet to view and manage your personalized indexing APIs.
-          </p>
-          <RainbowKitCustomConnectButton />
-        </div>
-      </div>
-    );
-  }
-
-  // Show authentication loading if connected but not authenticated
-  if (isConnected && !isAuthenticated) {
-    return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
-          <p className="text-gray-600 dark:text-gray-300">Loading your APIs...</p>
-        </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Loading Your APIs...</h3>
-          <p className="text-gray-600 dark:text-gray-300">
-            Please wait while we load your indexing APIs and job history.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   // Transform jobs with API URLs into user-friendly API cards
   // Deduplicate by jobId to prevent React key conflicts
+  console.log(`🔄 Processing ${jobs.length} jobs from useEthIndexer hook`);
   const uniqueJobs = jobs.filter((job, index, self) => 
     index === self.findIndex(j => j.jobId === job.jobId)
   );
@@ -128,13 +90,15 @@ export default function MyAPIsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Load more jobs if we're on the last page and have few items
+  // FIXED: This useEffect should only run once when the component mounts, not on every render
+  // The previous version was causing infinite loops by including jobs.length in dependencies
   useEffect(() => {
-    if (currentPage === totalPages && userAPIs.length < itemsPerPage && totalAPIs > 0) {
-      console.log('🔄 Loading more jobs...');
-      fetchJobs(50, jobs.length);
+    // Only fetch jobs once when the component mounts and user is authenticated
+    if (isConnected && isAuthenticated && jobs.length === 0) {
+      console.log('🔄 Initial jobs fetch...');
+      fetchJobs(50, 0); // Start from offset 0, don't append
     }
-  }, [currentPage, totalPages, userAPIs.length, itemsPerPage, totalAPIs, fetchJobs, jobs.length]);
+  }, [isConnected, isAuthenticated, fetchJobs]); // Remove jobs.length from dependencies to prevent infinite loop
 
   // Helper functions to create user-friendly names
   function generateAPITitle(job: any): string {
@@ -175,8 +139,51 @@ export default function MyAPIsPage() {
     window.open(fullUrl, '_blank');
   };
 
-  // Show connection status
+  // NOW WE CAN HANDLE CONDITIONAL RENDERING AFTER ALL HOOKS HAVE BEEN CALLED
+  
+  // Show wallet connection requirement if not connected
   if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
+          <p className="text-gray-600 dark:text-gray-300">Connect your wallet to view your indexing APIs</p>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <Wallet className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Wallet Connection Required</h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            Connect your wallet to view and manage your personalized indexing APIs.
+          </p>
+          <RainbowKitCustomConnectButton />
+        </div>
+      </div>
+    );
+  }
+
+  // Show authentication loading if connected but not authenticated
+  if (isConnected && !isAuthenticated) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
+          <p className="text-gray-600 dark:text-gray-300">Loading your APIs...</p>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Loading Your APIs...</h3>
+          <p className="text-gray-600 dark:text-gray-300">
+            Please wait while we load your indexing APIs and job history.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show connection status
+  if (!isBackendConnected) {
     return (
       <div className="space-y-6">
         <div>
@@ -375,16 +382,35 @@ export default function MyAPIsPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-2">
             Showing {startIndex + 1}-{Math.min(endIndex, totalAPIs)} of {totalAPIs} APIs
           </p>
-          {totalAPIs < 50 && (
+          {/* Only show Load More if we have more jobs to fetch from backend */}
+          {jobs.length < 50 && (
             <button
-              onClick={() => {
-                console.log('🔄 Manually loading more jobs...');
-                fetchJobs(50, jobs.length);
+              onClick={async () => {
+                if (isLoadingMore) return; // Prevent multiple simultaneous requests
+                setIsLoadingMore(true);
+                try {
+                  console.log('🔄 Manually loading more jobs from backend...');
+                  // Use a fixed offset to prevent infinite loops
+                  const nextOffset = Math.max(jobs.length, 0);
+                  await fetchJobs(50, nextOffset);
+                } finally {
+                  setIsLoadingMore(false);
+                }
               }}
-              className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+              disabled={isLoadingMore}
+              className="inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Zap className="h-4 w-4 mr-2" />
-              Load More APIs
+              {isLoadingMore ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                  Loading...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  Load More Jobs from Backend
+                </>
+              )}
             </button>
           )}
         </div>
