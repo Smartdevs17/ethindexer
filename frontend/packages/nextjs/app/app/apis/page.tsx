@@ -1,18 +1,61 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Copy, ExternalLink, Check, Link as LinkIcon, Zap } from 'lucide-react';
+import { Copy, ExternalLink, Check, Link as LinkIcon, Zap, Wallet } from 'lucide-react';
+import { useAccount } from 'wagmi';
 import { useEthIndexer } from '../../../hooks/ethindexer/useEthIndexer';
+import { RainbowKitCustomConnectButton } from '../../../components/scaffold-eth';
 
 export default function MyAPIsPage() {
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   
-  // Get real data from your existing hook
-  const { jobs, isConnected, fetchJobs } = useEthIndexer();
+  const { isConnected } = useAccount();
+  const { jobs, isConnected: isBackendConnected, fetchJobs, isAuthenticated } = useEthIndexer();
   
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+
+  // Show wallet connection requirement if not connected
+  if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
+          <p className="text-gray-600 dark:text-gray-300">Connect your wallet to view your indexing APIs</p>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <Wallet className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Wallet Connection Required</h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            Connect your wallet to view and manage your personalized indexing APIs.
+          </p>
+          <RainbowKitCustomConnectButton />
+        </div>
+      </div>
+    );
+  }
+
+  // Show authentication loading if connected but not authenticated
+  if (isConnected && !isAuthenticated) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
+          <p className="text-gray-600 dark:text-gray-300">Loading your APIs...</p>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Loading Your APIs...</h3>
+          <p className="text-gray-600 dark:text-gray-300">
+            Please wait while we load your indexing APIs and job history.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Transform jobs with API URLs into user-friendly API cards
   // Deduplicate by jobId to prevent React key conflicts

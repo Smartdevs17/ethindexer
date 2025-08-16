@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { IndexerService } from '../indexer/indexer.service';
 import { IndexerGateway } from '../websocket/indexer.gateway';
+import { UsersService } from '../users/users.service';
 
 export interface JobCreationResult {
   jobId: string;
@@ -30,13 +31,14 @@ export class OrchestratorService {
     private readonly aiService: AiService,
     private readonly indexerService: IndexerService,
     private readonly indexerGateway: IndexerGateway,
+    private readonly usersService: UsersService,
   ) {}
 
   /**
    * Main orchestration method: Natural Language → AI → Smart Caching → Indexing
    */
-  async executeAIQuery(query: string): Promise<any> {
-    this.logger.log(`🚀 Executing AI query: "${query}"`);
+  async executeAIQuery(query: string, userAddress?: string): Promise<any> {
+    this.logger.log(`🚀 Executing AI query: "${query}"${userAddress ? ` for user: ${userAddress}` : ''}`);
 
     try {
       // Step 1: Parse natural language with AI
@@ -84,22 +86,37 @@ export class OrchestratorService {
       this.logger.log(`🔄 No recent data found, creating new indexing job`);
 
       // Step 3: Create indexing job (only if no recent data)
+      const jobData: any = {
+        query,
+        config: config as any,
+        status: 'active',
+        priority: 'normal',
+        fromBlock: config.fromBlock?.toString(),
+        toBlock: config.toBlock?.toString(),
+        addresses: config.addresses || [],
+        events: config.events || ['Transfer'],
+        progress: 0,
+        blocksProcessed: '0',
+      };
+
+      // If user address is provided, try to find or create user and tie job to them
+      if (userAddress) {
+        try {
+          const user = await this.usersService.getOrCreateUser(userAddress);
+          jobData.userId = user.id;
+          
+          this.logger.log(`👤 Job will be tied to user: ${user.address} (${user.id})`);
+        } catch (error) {
+          this.logger.warn(`⚠️ Failed to tie job to user ${userAddress}: ${error.message}`);
+          // Continue without user association if it fails
+        }
+      }
+
       const job = await this.prisma.indexingJob.create({
-        data: {
-          query,
-          config: config as any,
-          status: 'active',
-          priority: 'normal',
-          fromBlock: config.fromBlock?.toString(),
-          toBlock: config.toBlock?.toString(),
-          addresses: config.addresses || [],
-          events: config.events || ['Transfer'],
-          progress: 0,
-          blocksProcessed: '0',
-        },
+        data: jobData,
       });
 
-      this.logger.log(`📋 Created job ${job.id}`);
+      this.logger.log(`📋 Created job ${job.id}${jobData.userId ? ` for user ${jobData.userId}` : ''}`);
 
       // Step 4: Emit job creation event
       this.indexerGateway.emitJobProgress({

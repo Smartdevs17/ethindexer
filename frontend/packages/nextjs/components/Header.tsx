@@ -10,6 +10,7 @@ import { Database, Bug, Settings, MessageSquare, Link as LinkIcon, BarChart3, Us
 import { FaucetButton, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useOutsideClick, useTargetNetwork } from "~~/hooks/scaffold-eth";
 import { useEthIndexer } from "~~/hooks/ethindexer/useEthIndexer";
+import { ConnectionStatus } from "~~/components/app/ConnectionStatus";
 
 type HeaderMenuLink = {
   label: string;
@@ -58,6 +59,13 @@ const ethIndexerTabs = [
     icon: MessageSquare, 
     desc: 'Generate new endpoints',
     path: '/app/query'
+  },
+  { 
+    id: 'jobs', 
+    label: 'Jobs', 
+    icon: Database, 
+    desc: 'Track job history',
+    path: '/app/jobs'
   },
   { 
     id: 'apis', 
@@ -166,17 +174,11 @@ export const Header = () => {
           </ul>
         </div>
         
-        <div className="navbar-end grow mr-4">
+        <div className="navbar-end flex items-center justify-end w-full">
           {/* EthIndexer Status when in app section */}
           {isInEthIndexerApp && (
-            <div className="flex items-center space-x-4 mr-4">
-              <div className={`flex items-center space-x-2 text-sm ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
-                <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                <span className="hidden sm:inline">{isConnected ? 'Connected' : 'Disconnected'}</span>
-                {connectedClients > 0 && (
-                  <span className="text-gray-500 dark:text-gray-400 hidden sm:inline">• {connectedClients} clients</span>
-                )}
-              </div>
+            <div className="flex items-center gap-2 mr-4">
+              <ConnectionStatus className="hidden sm:flex" />
               <button
                 onClick={() => setShowDebugPanel(!showDebugPanel)}
                 className={`p-2 rounded-lg transition-colors ${
@@ -191,8 +193,10 @@ export const Header = () => {
             </div>
           )}
           
-          <RainbowKitCustomConnectButton />
-          {isLocalNetwork && <FaucetButton />}
+          <div className="flex items-center gap-1 ml-auto">
+            <RainbowKitCustomConnectButton />
+            {isLocalNetwork && <FaucetButton />}
+          </div>
         </div>
       </div>
 

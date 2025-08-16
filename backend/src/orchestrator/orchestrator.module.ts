@@ -4,9 +4,10 @@ import { OrchestratorController } from './orchestrator.controller';
 import { AiModule } from '../ai/ai.module';
 import { IndexerModule } from '../indexer/indexer.module';
 import { WebsocketModule } from '../websocket/websocket.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
-  imports: [AiModule, IndexerModule, WebsocketModule],
+  imports: [AiModule, IndexerModule, WebsocketModule, UsersModule],
   providers: [OrchestratorService],
   controllers: [OrchestratorController],
   exports: [OrchestratorService],

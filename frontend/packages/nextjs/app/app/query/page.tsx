@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useState } from 'react';
-import { Play, Sparkles, Zap, MessageSquare, CheckCircle, ArrowRight } from 'lucide-react';
+import { Play, Sparkles, Zap, MessageSquare, CheckCircle, ArrowRight, Wallet } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { useEthIndexer } from '../../../hooks/ethindexer/useEthIndexer';
 import { ChatInterface } from '../../../components/ethindexer/chat/ChatInterface';
+import { RainbowKitCustomConnectButton } from '../../../components/scaffold-eth';
 
 export default function QueryBuilderPage() {
   const [queryInput, setQueryInput] = useState('');
@@ -13,12 +15,24 @@ export default function QueryBuilderPage() {
   const [createdAPI, setCreatedAPI] = useState<any>(null);
   const [activeInterface, setActiveInterface] = useState<'simple' | 'chat'>('simple');
   
-  const { createJob } = useEthIndexer();
+  const { isConnected } = useAccount();
+  const { createJob, isAuthenticated } = useEthIndexer();
   const router = useRouter();
 
   const handleCreateAPI = async (query?: string) => {
     const finalQuery = query || queryInput;
     if (!finalQuery.trim()) return;
+    
+    // Check if wallet is connected and user is authenticated
+    if (!isConnected) {
+      alert('Please connect your wallet first to create indexing jobs.');
+      return;
+    }
+    
+    if (!isAuthenticated) {
+      alert('Please wait for authentication to complete before creating jobs.');
+      return;
+    }
     
     setIsCreating(true);
     setShowSuccess(false);
@@ -53,6 +67,47 @@ export default function QueryBuilderPage() {
       handleCreateAPI();
     }
   };
+
+  // Show wallet connection requirement if not connected
+  if (!isConnected) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Create Your API</h2>
+          <p className="text-gray-600 dark:text-gray-300">Connect your wallet to start indexing blockchain data</p>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <Wallet className="h-16 w-16 text-gray-400 dark:text-gray-500 mx-auto mb-4" />
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Wallet Connection Required</h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            Connect your wallet to create personalized indexing jobs and track your blockchain data.
+          </p>
+          <RainbowKitCustomConnectButton />
+        </div>
+      </div>
+    );
+  }
+
+  // Show authentication loading if connected but not authenticated
+  if (isConnected && !isAuthenticated) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Create Your API</h2>
+          <p className="text-gray-600 dark:text-gray-300">Setting up your account...</p>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Authenticating...</h3>
+          <p className="text-gray-600 dark:text-gray-300">
+            Please wait while we set up your account and prepare your indexing environment.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const exampleQueries = [
     "Index USDC transfers from the last 1000 blocks",

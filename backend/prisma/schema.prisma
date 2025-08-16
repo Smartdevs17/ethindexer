@@ -7,6 +7,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id        String   @id @default(cuid())
+  address   String   @unique // Wallet address
+  ensName   String?  // ENS name if available
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  jobs      IndexingJob[]
+  addresses UserAddress[]
+  
+  @@index([address])
+}
+
+model UserAddress {
+  id        String   @id @default(cuid())
+  name      String   // Custom name for the address
+  address   String   // The tracked address
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  
+  @@unique([userId, address])
+  @@index([address])
+}
+
 model Transfer {
   id          String   @id @default(cuid())
   blockNumber String   // Changed: BigInt -> String (universal & reliable)
@@ -66,8 +92,13 @@ model IndexingJob {
   updatedAt       DateTime @updatedAt
   completedAt     DateTime?
   
+  // User relation
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
   @@index([status, priority])
   @@index([tier])
+  @@index([userId])
 }
 
 model ApiEndpoint {

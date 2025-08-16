@@ -12,17 +12,17 @@ export class OrchestratorController {
    * POST /orchestrator/execute
    */
   @Post('execute')
-  async executeQuery(@Body() body: { query: string }) {
-    const { query } = body;
+  async executeQuery(@Body() body: { query: string; userAddress?: string }) {
+    const { query, userAddress } = body;
 
     if (!query) {
       throw new Error('Query is required');
     }
 
-    this.logger.log(`🚀 Executing query: "${query}"`);
+    this.logger.log(`🚀 Executing query: "${query}"${userAddress ? ` for user: ${userAddress}` : ''}`);
 
     try {
-      const result = await this.orchestratorService.executeAIQuery(query);
+      const result = await this.orchestratorService.executeAIQuery(query, userAddress);
       
       return {
         success: true,

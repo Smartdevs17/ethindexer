@@ -10,7 +10,8 @@ import { IndexingOrchestratorModule } from './indexing-orchestrator/indexing-orc
 import { OrchestratorModule } from './orchestrator/orchestrator.module';
 import { ChatModule } from './chat/chat.module';
 import { TokensModule } from './tokens/tokens.module';
-
+import { LiveDataModule } from './api/live-data.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -26,7 +27,8 @@ import { TokensModule } from './tokens/tokens.module';
     OrchestratorModule,
     ChatModule,
     TokensModule,
-    
+    LiveDataModule,
+    UsersModule,
   ],
   controllers: [AppController],
 })

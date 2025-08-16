@@ -1,6 +1,7 @@
 // Fixed useEthIndexer.ts with proper timestamp handling
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import io, { Socket } from 'socket.io-client';
+import { useAccount } from 'wagmi';
 
 interface Job {
   jobId: string;
@@ -48,6 +49,29 @@ interface ChatMessage {
   content: string;
 }
 
+interface User {
+  id: string;
+  address: string;
+  ensName?: string;
+  createdAt: Date;
+  addresses: UserAddress[];
+  stats?: UserStats;
+}
+
+interface UserAddress {
+  id: string;
+  name: string;
+  address: string;
+  createdAt: Date;
+}
+
+interface UserStats {
+  totalJobs: number;
+  completedJobs: number;
+  activeJobs: number;
+  savedAddresses: number;
+}
+
 // Helper function to safely convert timestamps
 const safeTimestampToDate = (timestamp: any, fallback?: Date): Date => {
   if (!timestamp) {
@@ -89,7 +113,10 @@ export const useEthIndexer = () => {
   const [systemStatus, setSystemStatus] = useState('');
   const [connectedClients, setConnectedClients] = useState(0);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
+  const [user, setUser] = useState<User | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  const { address, isConnected: isWalletConnected } = useAccount();
   const apiUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   // Helper function to add debug messages
@@ -97,6 +124,57 @@ export const useEthIndexer = () => {
     const timestamp = new Date().toLocaleTimeString();
     setDebugInfo(prev => [`${timestamp}: ${message}`, ...prev.slice(0, 19)]);
   };
+
+  // Authenticate user when wallet connects
+  const authenticateUser = useCallback(async (walletAddress: string) => {
+    try {
+      console.log('🔐 Authenticating user:', walletAddress);
+      addDebugInfo(`Authenticating user: ${walletAddress.slice(0, 8)}...`);
+      
+      const response = await fetch(`${apiUrl}/users/auth`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ address: walletAddress })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setUser(data.user);
+          setIsAuthenticated(true);
+          addDebugInfo(`✅ User authenticated: ${data.user.address.slice(0, 8)}...`);
+          return data.user;
+        }
+      }
+      
+      throw new Error('Authentication failed');
+    } catch (error) {
+      console.error('❌ Authentication failed:', error);
+      addDebugInfo(`❌ Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      
+      // Retry authentication after 3 seconds for network issues
+      if (error instanceof Error && error.message.includes('fetch')) {
+        addDebugInfo('🔄 Retrying authentication in 3 seconds...');
+        setTimeout(() => {
+          if (isWalletConnected && address) {
+            authenticateUser(address);
+          }
+        }, 3000);
+      }
+      
+      return null;
+    }
+  }, [apiUrl, isWalletConnected, address]);
+
+  // Authenticate when wallet connects with retry logic
+  useEffect(() => {
+    if (isWalletConnected && address && !isAuthenticated) {
+      authenticateUser(address);
+    } else if (!isWalletConnected) {
+      setUser(null);
+      setIsAuthenticated(false);
+    }
+  }, [isWalletConnected, address, isAuthenticated, authenticateUser]);
 
   // WebSocket setup
   useEffect(() => {
@@ -210,15 +288,23 @@ export const useEthIndexer = () => {
     };
   }, []);
 
-  // FIXED: Create job function with proper timestamp handling
+  // FIXED: Create job function with proper timestamp handling and user support
   const createJob = async (query: string) => {
     try {
       addDebugInfo(`🚀 Creating job: ${query.slice(0, 50)}...`);
       
+      const requestBody: any = { query };
+      
+      // Add user address if authenticated
+      if (isAuthenticated && user) {
+        requestBody.userAddress = user.address;
+        addDebugInfo(`👤 Creating job for user: ${user.address.slice(0, 8)}...`);
+      }
+      
       const response = await fetch(`${apiUrl}/orchestrator/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!response.ok) {
@@ -279,7 +365,7 @@ export const useEthIndexer = () => {
   };
 
   // FIXED: Fetch jobs with proper timestamp conversion and pagination
-  const fetchJobs = async (limit = 50, offset = 0) => {
+  const fetchJobs = useCallback(async (limit = 50, offset = 0) => {
     try {
       console.log(`📡 Fetching jobs from API (limit: ${limit}, offset: ${offset})...`);
       const response = await fetch(`${apiUrl}/orchestrator/jobs?limit=${limit}&offset=${offset}`);
@@ -297,94 +383,85 @@ export const useEthIndexer = () => {
             updatedAt: job.updatedAt
           });
           
-          // Generate API URL for existing jobs
-          let generatedApiUrl = undefined;
+          // Convert timestamp to Date object
+          const timestamp = safeTimestampToDate(job.timestamp, new Date());
+          
+          // Generate API URL based on job message
+          let apiUrl: string | undefined;
+          let apiDescription: string | undefined;
           let apiStatus: 'preparing' | 'ready' = 'preparing';
           
-          if (job.status === 'completed' && job.config) {
-            // For completed jobs, generate the API URL
-            if (job.config.apiEndpoint) {
-              generatedApiUrl = `${apiUrl}/api/${job.config.apiEndpoint}`;
+          if (job.status === 'completed' && job.message) {
+            const message = job.message.toLowerCase();
+            if (message.includes('usdc')) {
+              apiUrl = '/api/usdc-transfers';
+              apiDescription = 'USDC transfer data';
               apiStatus = 'ready';
-            } else if (job.config.addresses && job.config.addresses.length > 0) {
-              // Generate URL based on token address
-              const address = job.config.addresses[0];
-              generatedApiUrl = `${apiUrl}/api/transfers?token=${address}`;
+            } else if (message.includes('weth')) {
+              apiUrl = '/api/weth-transfers';
+              apiDescription = 'WETH transfer data';
+              apiStatus = 'ready';
+            } else if (message.includes('dai')) {
+              apiUrl = '/api/dai-transfers';
+              apiDescription = 'DAI transfer data';
+              apiStatus = 'ready';
+            } else if (message.includes('usdt')) {
+              apiUrl = '/api/usdt-transfers';
+              apiDescription = 'USDT transfer data';
               apiStatus = 'ready';
             } else {
-              // Default transfers endpoint
-              generatedApiUrl = `${apiUrl}/api/transfers`;
+              // Generic API endpoint
+              apiUrl = '/api/transfers';
+              apiDescription = 'General transfer data';
               apiStatus = 'ready';
-            }
-          } else if (job.status === 'active') {
-            // For active jobs, generate a preview API URL
-            if (job.config?.apiEndpoint) {
-              generatedApiUrl = `${apiUrl}/api/${job.config.apiEndpoint}`;
-              apiStatus = 'preparing';
-            } else if (job.config?.addresses && job.config.addresses.length > 0) {
-              const address = job.config.addresses[0];
-              generatedApiUrl = `${apiUrl}/api/transfers?token=${address}`;
-              apiStatus = 'preparing';
-            } else {
-              generatedApiUrl = `${apiUrl}/api/transfers`;
-              apiStatus = 'preparing';
             }
           }
           
           return {
-            ...job,
-            jobId: job.id, // Map id to jobId for consistency
-            // Try multiple timestamp fields and convert safely
-            timestamp: safeTimestampToDate(
-              job.timestamp || job.updatedAt || job.createdAt
-            ),
-            // Also convert other date fields if they exist
-            createdAt: job.createdAt ? safeTimestampToDate(job.createdAt) : undefined,
-            updatedAt: job.updatedAt ? safeTimestampToDate(job.updatedAt) : undefined,
-            completedAt: job.completedAt ? safeTimestampToDate(job.completedAt) : undefined,
-            // Add generated API URL and status
-            apiUrl: generatedApiUrl,
-            apiStatus: apiStatus,
-            apiDescription: job.config?.originalQuery || job.query,
+            jobId: job.id,
+            message: job.message || 'Unknown job',
+            progress: job.progress || 0,
+            status: job.status || 'unknown',
+            timestamp,
+            apiUrl,
+            apiDescription,
+            apiStatus,
           };
         });
         
         console.log('✅ Jobs with converted timestamps and API URLs:', jobsWithTimestamps);
         
-        // If this is the first page (offset = 0), replace all jobs
-        // Otherwise, append new jobs to existing ones, avoiding duplicates
         if (offset === 0) {
+          // First page - replace all jobs
           setJobs(jobsWithTimestamps);
         } else {
-          setJobs(prev => {
-            // Create a map of existing job IDs for quick lookup
-            const existingJobIds = new Set(prev.map(job => job.jobId));
-            
-            // Filter out jobs that already exist
-            const newJobs = jobsWithTimestamps.filter((job: Job) => !existingJobIds.has(job.jobId));
-            
-            // Append only new jobs
-            return [...prev, ...newJobs];
-          });
+          // Subsequent pages - append to existing jobs
+          setJobs(prev => [...prev, ...jobsWithTimestamps]);
         }
         
-        addDebugInfo(`Fetched ${jobsWithTimestamps.length} jobs (total: ${data.pagination?.total || 'unknown'})`);
-        
-        // Return pagination info for the frontend
-        return {
-          jobs: jobsWithTimestamps,
-          pagination: data.pagination,
-          summary: data.summary
-        };
+        addDebugInfo(`Fetched ${jobsWithTimestamps.length} jobs from API`);
       } else {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
     } catch (error) {
       console.error('❌ Failed to fetch jobs:', error);
-      addDebugInfo(`Job fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      return { jobs: [], pagination: null, summary: null };
+      addDebugInfo(`Jobs fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
+  }, [apiUrl]);
+
+  // Get system stats
+  const getStats = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiUrl}/orchestrator/stats`);
+      if (response.ok) {
+        const data = await response.json();
+        addDebugInfo(`Stats: ${data.stats?.activeJobs || 0} active jobs`);
+        return data.stats;
+      }
+    } catch (error) {
+      addDebugInfo(`Stats fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, [apiUrl]);
 
   // Send chat message
   const sendChatMessage = async (message: string, conversationHistory: ChatMessage[] = []) => {
@@ -432,20 +509,6 @@ export const useEthIndexer = () => {
     } catch (error) {
       addDebugInfo(`Suggestions failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return [];
-    }
-  };
-
-  // Get system stats
-  const getStats = async () => {
-    try {
-      const response = await fetch(`${apiUrl}/orchestrator/stats`);
-      if (response.ok) {
-        const data = await response.json();
-        addDebugInfo(`Stats: ${data.stats?.activeJobs || 0} active jobs`);
-        return data.stats;
-      }
-    } catch (error) {
-      addDebugInfo(`Stats fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
 
@@ -499,12 +562,153 @@ export const useEthIndexer = () => {
     }
   };
 
+  // Fetch live data statistics
+  const fetchLiveDataStats = useCallback(async () => {
+    try {
+      console.log('📊 Fetching live data statistics...');
+      const response = await fetch(`${apiUrl}/live-data/stats`);
+      
+      if (response.ok) {
+        const data = await response.json();
+        console.log('📥 Live data stats:', data);
+        
+        if (data.success && data.stats) {
+          // Update transfers with recent activity
+          if (data.recentActivity && data.recentActivity.length > 0) {
+            const recentTransfers = data.recentActivity.map((transfer: any) => ({
+              id: transfer.id,
+              value: transfer.value,
+              token: {
+                address: transfer.token.address,
+                symbol: transfer.token.symbol,
+                name: transfer.token.name,
+              },
+              from: transfer.from,
+              to: transfer.to,
+              blockNumber: transfer.blockNumber,
+              timestamp: new Date(transfer.timestamp),
+              txHash: transfer.txHash,
+            }));
+            
+            setTransfers(recentTransfers);
+            addDebugInfo(`Updated with ${recentTransfers.length} recent transfers`);
+          }
+          
+          addDebugInfo(`Live stats: ${data.stats.totalTransfers} transfers, ${data.stats.activeAPIs} APIs`);
+          return data.stats;
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch live data stats:', error);
+      addDebugInfo(`Live data fetch failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, [apiUrl]); // Add apiUrl to dependency array
+
+  // User management functions
+  const addUserAddress = async (name: string, address: string) => {
+    if (!isAuthenticated || !user) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/users/${user.address}/addresses`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, address })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Refresh user data to get updated addresses
+          await refreshUserData();
+          addDebugInfo(`✅ Added address: ${name} (${address.slice(0, 8)}...)`);
+          return data.address;
+        }
+      }
+      
+      throw new Error('Failed to add address');
+    } catch (error) {
+      console.error('❌ Failed to add address:', error);
+      addDebugInfo(`❌ Failed to add address: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
+  };
+
+  const removeUserAddress = async (addressId: string) => {
+    if (!isAuthenticated || !user) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/users/${user.address}/addresses/${addressId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          // Refresh user data to get updated addresses
+          await refreshUserData();
+          addDebugInfo(`✅ Removed address: ${addressId}`);
+          return data;
+        }
+      }
+      
+      throw new Error('Failed to remove address');
+    } catch (error) {
+      console.error('❌ Failed to remove address:', error);
+      addDebugInfo(`❌ Failed to remove address: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
+  };
+
+  const refreshUserData = async () => {
+    if (!isAuthenticated || !user) return;
+
+    try {
+      const response = await fetch(`${apiUrl}/users/profile/${user.address}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setUser(data.user);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Failed to refresh user data:', error);
+    }
+  };
+
+  const getUserJobs = async (limit = 20, offset = 0) => {
+    if (!isAuthenticated || !user) {
+      throw new Error('User not authenticated');
+    }
+
+    try {
+      const response = await fetch(`${apiUrl}/users/${user.address}/jobs?limit=${limit}&offset=${offset}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          return data;
+        }
+      }
+      
+      throw new Error('Failed to get user jobs');
+    } catch (error) {
+      console.error('❌ Failed to get user jobs:', error);
+      addDebugInfo(`❌ Failed to get user jobs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
+  };
+
   // Load initial data
   useEffect(() => {
     fetchJobs();
-    fetchTransfers(); // Add this to load existing transfers
+    fetchLiveDataStats(); // Use live data stats instead of just transfers
     getStats();
-  }, []);
+  }, [fetchJobs, fetchLiveDataStats, getStats]); // Add dependencies
 
   return {
     // WebSocket connection
@@ -518,12 +722,24 @@ export const useEthIndexer = () => {
     connectedClients,
     debugInfo,
     
+    // User data
+    user,
+    isAuthenticated,
+    
     // Job management
     createJob,
     fetchJobs,
     forceRefreshJobs, // Add this for debugging
     fetchTransfers, // Add this to the return object
+    fetchLiveDataStats, // Add live data stats function
     getStats,
+    
+    // User management
+    authenticateUser,
+    addUserAddress,
+    removeUserAddress,
+    refreshUserData,
+    getUserJobs,
     
     // Chat functionality
     sendChatMessage,
