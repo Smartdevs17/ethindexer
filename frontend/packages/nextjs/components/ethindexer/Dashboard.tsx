@@ -342,7 +342,7 @@ export const EthIndexerDashboard = () => {
                     <div className="flex justify-between items-center mb-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900 dark:text-white">
-                          {job.jobId.slice(0, 8)}...
+                          {job.jobId?.slice(0, 8) || 'Unknown'}...
                         </span>
                         {job.status === 'active' && (
                           <div className="flex items-center gap-1">
@@ -413,7 +413,7 @@ export const EthIndexerDashboard = () => {
                             </a>
                           </div>
                           <button
-                            onClick={() => copyApiUrl(job.apiUrl!, job.jobId)}
+                            onClick={() => job.jobId && copyApiUrl(job.apiUrl!, job.jobId)}
                             className={`ml-2 px-2 py-1 rounded text-xs font-medium transition-colors ${
                               copiedJobId === job.jobId
                                 ? 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-200'

@@ -2,9 +2,21 @@ import { Controller, Get, Param, Query, NotFoundException, OnModuleInit } from '
 import { DynamicApiService } from './dynamic-api.service';
 import { Logger } from '@nestjs/common';
 
-@Controller('api')
+@Controller('api/dynamic') // Changed from 'api' to 'api/dynamic' to avoid conflicts
 export class DynamicApiController implements OnModuleInit {
   private readonly logger = new Logger(DynamicApiController.name);
+  
+  // Define static endpoints that should not be handled by this controller
+  private readonly staticEndpoints = [
+    'blocks',
+    'live-data',
+    'users',
+    'orchestrator',
+    'indexer',
+    'chat',
+    'ai',
+    'tokens'
+  ];
 
   constructor(private readonly dynamicApiService: DynamicApiService) {}
 
@@ -15,7 +27,7 @@ export class DynamicApiController implements OnModuleInit {
 
   /**
    * 📋 List all available dynamic endpoints
-   * GET /api
+   * GET /api/dynamic
    */
   @Get()
   async listEndpoints() {
@@ -28,7 +40,7 @@ export class DynamicApiController implements OnModuleInit {
         count: endpoints.length,
         message: 'Available dynamic API endpoints',
         usage: {
-          example: 'GET /api/usdc-transfers?limit=10&fromBlock=18000000',
+          example: 'GET /api/dynamic/usdc-transfers?limit=10&fromBlock=18000000',
           parameters: 'All endpoints support: limit, offset, sortBy, sortOrder, address, fromBlock, toBlock, minValue, maxValue'
         },
         timestamp: new Date(),
@@ -47,14 +59,26 @@ export class DynamicApiController implements OnModuleInit {
 
   /**
    * 🔍 Execute dynamic API endpoint
-   * GET /api/:endpoint
+   * GET /api/dynamic/:endpoint
    */
   @Get(':endpoint')
   async executeDynamicEndpoint(
     @Param('endpoint') endpoint: string,
     @Query() queryParams: Record<string, any>
   ) {
-    const path = `/api/${endpoint}`;
+    // Check if this is a static endpoint that should not be handled here
+    if (this.staticEndpoints.includes(endpoint)) {
+      this.logger.log(`🚫 Skipping static endpoint: ${endpoint} - should be handled by specific controller`);
+      throw new NotFoundException({
+        success: false,
+        error: `Endpoint /api/dynamic/${endpoint} is a static endpoint`,
+        message: 'This endpoint is handled by a specific controller, not the dynamic API system.',
+        availableEndpoints: '/api/dynamic',
+        timestamp: new Date(),
+      });
+    }
+
+    const path = `/api/dynamic/${endpoint}`; // Updated path to match new route
     this.logger.log(`🔍 Executing dynamic endpoint: ${path}`);
     this.logger.debug(`Query parameters:`, queryParams);
 
@@ -74,7 +98,7 @@ export class DynamicApiController implements OnModuleInit {
           success: false,
           error: `Endpoint ${path} not found`,
           message: 'This endpoint has not been generated yet. Create it by running an indexing query.',
-          availableEndpoints: '/api',
+          availableEndpoints: '/api/dynamic',
           timestamp: new Date(),
         });
       }

@@ -59,10 +59,10 @@ export class DynamicApiService {
       // Generate endpoint configuration
       const endpointConfig = await this.createEndpointConfig(config, job);
       
-  // Store in database
-  await this.storeApiEndpoint(endpointConfig, config);
-  // Also create API endpoint and emit websocket event with jobId
-  await this.createApiEndpoint(jobId, endpointConfig.path, config.originalQuery, endpointConfig.sqlQuery);
+        // Store in database
+      await this.storeApiEndpoint(endpointConfig, config, jobId);
+      // Also create API endpoint and emit websocket event with jobId
+      await this.createApiEndpoint(jobId, endpointConfig.path, config.originalQuery, endpointConfig.sqlQuery);
   this.logger.log(`✅ Generated API endpoint: ${endpointConfig.path}`);
   return endpointConfig;
 
@@ -80,7 +80,9 @@ export class DynamicApiService {
     job: any
   ): Promise<ApiEndpointConfig> {
     
-    const path = `/api/${config.apiEndpoint}`;
+    // 🔧 FIXED: Generate unique API endpoint path for each job
+    // This ensures each job gets its own API endpoint, even if they have similar queries
+    const uniquePath = this.generateUniqueApiPath(config, job);
     
     // Generate description
     const description = this.generateDescription(config);
@@ -95,7 +97,7 @@ export class DynamicApiService {
     const cacheTime = this.determineCacheTime(config);
 
     return {
-      path,
+      path: uniquePath,
       method: 'GET',
       description,
       parameters,
@@ -103,6 +105,23 @@ export class DynamicApiService {
       sqlQuery,
       cacheTime,
     };
+  }
+
+  /**
+   * 🔧 NEW: Generate unique API endpoint path for each job
+   * This prevents conflicts when multiple jobs have similar queries
+   */
+  private generateUniqueApiPath(config: IndexingConfig, job: any): string {
+    const jobId = job.id;
+    const baseEndpoint = config.apiEndpoint;
+    
+    // Create unique path: /api/dynamic/{base-endpoint}/{job-id}
+    // Example: /api/dynamic/usdc-transfers/job123, /api/dynamic/weth-transfers/job456
+    const uniquePath = `/api/dynamic/${baseEndpoint}/${jobId}`;
+    
+    this.logger.log(`🔧 Generated unique API path: ${uniquePath} for job ${jobId}`);
+    
+    return uniquePath;
   }
 
   /**
@@ -270,7 +289,8 @@ export class DynamicApiService {
    */
   private async storeApiEndpoint(
     endpointConfig: ApiEndpointConfig,
-    originalConfig: IndexingConfig
+    originalConfig: IndexingConfig,
+    jobId: string
   ): Promise<void> {
     await this.prisma.apiEndpoint.upsert({
       where: { path: endpointConfig.path },
@@ -281,6 +301,7 @@ export class DynamicApiService {
         parameters: endpointConfig.parameters,
         description: endpointConfig.description,
         cacheTime: endpointConfig.cacheTime,
+        jobId: jobId, // 🔧 NEW: Link to the job that created this endpoint
       },
       update: {
         query: originalConfig.originalQuery,
@@ -289,6 +310,7 @@ export class DynamicApiService {
         description: endpointConfig.description,
         cacheTime: endpointConfig.cacheTime,
         lastUsed: new Date(),
+        jobId: jobId, // 🔧 NEW: Update jobId if endpoint already exists
       },
     });
   }
@@ -308,9 +330,11 @@ export class DynamicApiService {
         where: { path },
       });
 
-      if (!endpoint) {
+      let endpointToUse = endpoint;
+      
+      if (!endpointToUse) {
         // Try to create default endpoints if the requested one doesn't exist
-        if (path === '/api/transfers') {
+        if (path === '/api/dynamic/transfers') {
           this.logger.log('🔄 Transfers endpoint not found, creating default...');
           await this.createDefaultTransfersEndpoint();
           
@@ -322,13 +346,32 @@ export class DynamicApiService {
           if (!newEndpoint) {
             throw new Error(`Failed to create endpoint ${path}`);
           }
+          
+          // 🔧 FIXED: Use the newly created endpoint
+          endpointToUse = newEndpoint;
         } else {
           throw new Error(`Endpoint ${path} not found`);
         }
       }
 
+      // 🔧 FIXED: Ensure endpoint is not null before accessing sqlQuery
+      if (!endpointToUse || !endpointToUse.sqlQuery) {
+        this.logger.error(`❌ Endpoint ${path} configuration error:`, {
+          endpointExists: !!endpointToUse,
+          hasSqlQuery: !!endpointToUse?.sqlQuery,
+          endpointData: endpointToUse
+        });
+        throw new Error(`Endpoint ${path} is missing required configuration (sqlQuery)`);
+      }
+
+      this.logger.log(`✅ Using endpoint configuration:`, {
+        path: endpointToUse.path,
+        hasSqlQuery: !!endpointToUse.sqlQuery,
+        hasParameters: !!endpointToUse.parameters
+      });
+
       // Build dynamic query
-      const { query, countQuery } = this.buildDynamicQuery(endpoint.sqlQuery, queryParams);
+      const { query, countQuery } = this.buildDynamicQuery(endpointToUse.sqlQuery, queryParams);
       
       // Execute queries
       const [data, countResult] = await Promise.all([
@@ -352,7 +395,7 @@ export class DynamicApiService {
         metadata: {
           endpoint: path,
           generatedAt: new Date().toISOString(),
-          query: endpoint.query,
+          query: endpointToUse.query,
         },
       };
 
@@ -481,7 +524,7 @@ export class DynamicApiService {
     try {
       // Check if transfers endpoint already exists
       const existingEndpoint = await this.prisma.apiEndpoint.findUnique({
-        where: { path: '/api/transfers' },
+        where: { path: '/api/dynamic/transfers' },
       });
 
       if (existingEndpoint) {
@@ -491,7 +534,7 @@ export class DynamicApiService {
 
       // Create default transfers endpoint
       const defaultConfig = {
-        path: '/api/transfers',
+        path: '/api/dynamic/transfers',
         query: 'Show me all token transfers',
         sqlQuery: `
           SELECT 
@@ -534,7 +577,7 @@ export class DynamicApiService {
         data: defaultConfig,
       });
 
-      this.logger.log('✅ Created default transfers endpoint: /api/transfers');
+      this.logger.log('✅ Created default transfers endpoint: /api/dynamic/transfers');
 
     } catch (error) {
       this.logger.error('❌ Failed to create default transfers endpoint:', error);

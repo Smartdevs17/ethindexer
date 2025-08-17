@@ -96,6 +96,9 @@ model IndexingJob {
   userId    String?
   user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   
+  // 🔧 NEW: Link to API endpoints created by this job
+  apiEndpoints ApiEndpoint[]
+  
   @@index([status, priority])
   @@index([tier])
   @@index([userId])
@@ -114,8 +117,13 @@ model ApiEndpoint {
   lastUsed    DateTime?
   useCount    Int      @default(0)
   
+  // 🔧 NEW: Link to the indexing job that created this endpoint
+  jobId       String?
+  job         IndexingJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  
   @@index([tier])
   @@index([useCount])
+  @@index([jobId])
 }
 
 model IndexingMetrics {

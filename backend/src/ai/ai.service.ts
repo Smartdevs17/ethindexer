@@ -120,13 +120,17 @@ IMPORTANT: Return ONLY the JSON object, no other text.
       if (blocks.length >= 2) toBlock = blocks[1];
     }
     
-    // Determine API endpoint based on content
-    let apiEndpoint = 'generic-data';
-    if (lowerQuery.includes('usdc')) apiEndpoint = 'usdc-transfers';
-    else if (lowerQuery.includes('usdt')) apiEndpoint = 'usdt-transfers';
-    else if (lowerQuery.includes('weth')) apiEndpoint = 'weth-transfers';
-    else if (lowerQuery.includes('dai')) apiEndpoint = 'dai-transfers';
-    else if (addressMatches.length > 0) apiEndpoint = 'address-transfers';
+    // Determine API endpoint base based on content
+    let apiEndpointBase = 'generic-data';
+    if (lowerQuery.includes('usdc')) apiEndpointBase = 'usdc-transfers';
+    else if (lowerQuery.includes('usdt')) apiEndpointBase = 'usdt-transfers';
+    else if (lowerQuery.includes('weth')) apiEndpointBase = 'weth-transfers';
+    else if (lowerQuery.includes('dai')) apiEndpointBase = 'dai-transfers';
+    else if (addressMatches.length > 0) apiEndpointBase = 'address-transfers';
+    
+    // Note: The actual unique endpoint will be generated when the job is created
+    // This is just the base pattern
+    const apiEndpoint = apiEndpointBase;
     
     // Basic filters
     const filters: Record<string, any> = {};

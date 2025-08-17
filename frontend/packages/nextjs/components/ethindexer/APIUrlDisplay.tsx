@@ -108,7 +108,7 @@ function generateWorkingApiUrls(baseUrl: string, config: any, query: string) {
   // Main transfers endpoint (always works)
   urls.push({
     title: "All Transfers",
-    url: `${baseUrl}/api/transfers?limit=100`
+    url: `${baseUrl}/api/dynamic/transfers?limit=100`
   });
 
   // If specific token address was indexed
@@ -116,7 +116,7 @@ function generateWorkingApiUrls(baseUrl: string, config: any, query: string) {
     const address = config.addresses[0];
     urls.push({
       title: "Transfers for this Token",
-      url: `${baseUrl}/api/transfers?token=${address}&limit=100`
+      url: `${baseUrl}/api/dynamic/transfers?token=${address}&limit=100`
     });
   }
 
@@ -124,14 +124,14 @@ function generateWorkingApiUrls(baseUrl: string, config: any, query: string) {
   if (config?.fromBlock) {
     urls.push({
       title: "Transfers from Block Range",
-      url: `${baseUrl}/api/transfers?fromBlock=${config.fromBlock}&limit=100`
+      url: `${baseUrl}/api/dynamic/transfers?fromBlock=${config.fromBlock}&limit=100`
     });
   }
 
   // Recent transfers using the working endpoint
   urls.push({
     title: "Recent Transfers",
-    url: `${baseUrl}/api/transfers?limit=50&sortBy=timestamp&sortOrder=DESC`
+    url: `${baseUrl}/api/dynamic/transfers?limit=50&sortBy=timestamp&sortOrder=DESC`
   });
 
   return urls;

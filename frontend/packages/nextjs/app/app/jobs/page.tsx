@@ -96,6 +96,11 @@ export default function JobsPage() {
   // Filter and sort jobs
   const filteredJobs = jobs
     .filter(job => {
+      // Filter out jobs without valid jobId
+      if (!job.jobId) {
+        return false;
+      }
+      
       // Filter by status
       if (filters.status !== 'all' && job.status !== filters.status) {
         return false;
@@ -339,7 +344,7 @@ export default function JobsPage() {
             </div>
           ) : (
             paginatedJobs.map((job) => (
-              <div key={job.jobId} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+              <div key={job.jobId || `job-${Math.random()}`} className="p-6 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
@@ -348,7 +353,7 @@ export default function JobsPage() {
                         {job.status}
                       </span>
                       <button
-                        onClick={() => copyJobId(job.jobId)}
+                        onClick={() => job.jobId && copyJobId(job.jobId)}
                         className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                       >
                         {copiedJobId === job.jobId ? (
@@ -359,7 +364,7 @@ export default function JobsPage() {
                         ) : (
                           <>
                             <Copy className="h-3 w-3" />
-                            {job.jobId.slice(0, 8)}...
+                            {job.jobId?.slice(0, 8) || 'Unknown'}...
                           </>
                         )}
                       </button>

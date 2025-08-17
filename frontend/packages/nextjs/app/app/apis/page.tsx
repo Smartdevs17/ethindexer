@@ -17,8 +17,9 @@ export default function MyAPIsPage() {
   const { jobs, isConnected: isBackendConnected, fetchJobs, isAuthenticated } = useEthIndexer();
   
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
-
-  // Transform jobs with API URLs into user-friendly API cards
+    
+  // Each job gets its own endpoint: /api/dynamic/usdc-transfers/job123, /api/dynamic/usdc-transfers/job456
+  // No more URL deduplication needed - backend handles uniqueness
   // Deduplicate by jobId to prevent React key conflicts
   console.log(`🔄 Processing ${jobs.length} jobs from useEthIndexer hook`);
   const uniqueJobs = jobs.filter((job, index, self) => 
@@ -28,54 +29,48 @@ export default function MyAPIsPage() {
   // Create APIs from jobs with intelligent URL generation and deduplication
   const allUserAPIs = uniqueJobs
     .filter(job => {
-      // Show ALL jobs that have any message - very inclusive filtering
+      // 🔧 FIXED: Only show jobs that are COMPLETED and have API endpoints
       const hasMessage = job.message && job.message.length > 0;
+      const isCompleted = job.status === 'completed';
+      const hasApiEndpoint = job.apiUrl && job.apiUrl.length > 0;
       
-      // Include any job that has a message, regardless of status or progress
-      return hasMessage;
+      // Job must be completed AND have an API endpoint to be shown
+      return hasMessage && isCompleted && hasApiEndpoint;
     })
     .map(job => {
-      // Generate API URL based on job data
+      // 🔧 DEBUG: Log job structure to understand the data
+      console.log('🔍 Processing job:', {
+        jobId: job.jobId,
+        status: job.status,
+        message: job.message,
+        apiUrl: job.apiUrl,
+        generatedId: generateJobIdFromData(job)
+      });
+      
+      // 🔧 UPDATED: Use backend's unique API URLs when available
       let apiUrl = job.apiUrl;
       
-      // If no apiUrl, try to generate one based on the job message
-      if (!apiUrl && job.message) {
-        const message = job.message.toLowerCase();
-        if (message.includes('usdc')) {
-          apiUrl = '/api/usdc-transfers';
-        } else if (message.includes('weth')) {
-          apiUrl = '/api/weth-transfers';
-        } else if (message.includes('usdt')) {
-          apiUrl = '/api/usdt-transfers';
-        } else if (message.includes('dai')) {
-          apiUrl = '/api/dai-transfers';
-        } else {
-          // Default to transfers endpoint
-          apiUrl = '/api/transfers';
-        }
-      }
-      
-      // Fallback to job ID if still no URL
-      if (!apiUrl && job.jobId) {
-        apiUrl = `/api/job/${job.jobId}`;
+      // If no apiUrl from backend, skip this job (shouldn't happen with our filter)
+      if (!apiUrl || !job.apiUrl) {
+        const jobId = job.jobId || generateJobIdFromData(job);
+        console.warn(`⚠️ Job ${jobId} has no API endpoint despite being completed`);
+        return null;
       }
       
       return {
-        id: job.jobId || `job-${Date.now()}-${Math.random()}`, // Ensure unique ID
+        id: job.jobId || generateJobIdFromData(job), // Ensure unique ID using our new function
         title: generateAPITitle(job),
         description: generateAPIDescription(job),
-        url: apiUrl || `/api/job/${job.jobId || 'default'}`,
+        url: apiUrl,
         query: job.message || 'Custom blockchain query',
-        status: 'ready', // Show all jobs with messages as ready
+        status: job.status || 'completed', // Use actual job status
         createdAt: job.timestamp,
         requests: 0, // Can be enhanced later with usage tracking
         lastUsed: 'Recently'
       };
     })
-    // Deduplicate APIs by URL to group similar jobs
-    .filter((api, index, self) => 
-      index === self.findIndex(a => a.url === api.url)
-    );
+    .filter(Boolean); // Remove any null entries
+    // 🔧 REMOVED: URL deduplication - backend now provides unique endpoints per job
 
   // Pagination logic
   const totalAPIs = allUserAPIs.length;
@@ -103,22 +98,43 @@ export default function MyAPIsPage() {
   // Helper functions to create user-friendly names
   function generateAPITitle(job: any): string {
     const query = job.message || '';
+    // 🔧 FIXED: Generate a unique job ID from available data since backend doesn't send jobId
+    const jobId = job.jobId || generateJobIdFromData(job);
     
-    if (query.toLowerCase().includes('usdc')) return 'USDC Transfers API';
-    if (query.toLowerCase().includes('weth')) return 'WETH Transfers API';
-    if (query.toLowerCase().includes('usdt')) return 'USDT Transfers API';
-    if (query.toLowerCase().includes('dai')) return 'DAI Transfers API';
+    // 🔧 UPDATED: Generate titles that work with unique endpoints
+    if (query.toLowerCase().includes('usdc')) return `USDC Transfers API (Job ${jobId})`;
+    if (query.toLowerCase().includes('weth')) return `WETH Transfers API (Job ${jobId})`;
+    if (query.toLowerCase().includes('usdt')) return `USDT Transfers API (Job ${jobId})`;
+    if (query.toLowerCase().includes('dai')) return `DAI Transfers API (Job ${jobId})`;
     
     // Extract token symbol or use generic name
     const tokenMatch = query.match(/([A-Z]{2,5})\s+transfer/i);
-    if (tokenMatch) return `${tokenMatch[1].toUpperCase()} Transfers API`;
+    if (tokenMatch) return `${tokenMatch[1].toUpperCase()} Transfers API (Job ${jobId})`;
     
-    return `Blockchain Data API`;
+    return `Blockchain Data API (Job ${jobId})`;
+  }
+
+  // 🔧 NEW: Generate a unique job ID from available job data
+  function generateJobIdFromData(job: any): string {
+    // Try to create a unique ID from timestamp and message hash
+    if (job.timestamp) {
+      const timestamp = new Date(job.timestamp).getTime();
+      const messageHash = job.message ? job.message.split(' ').join('').slice(0, 8) : 'job';
+      return `${messageHash}-${timestamp}`;
+    }
+    
+    // Fallback to a random ID if no timestamp
+    return `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   }
 
   function generateAPIDescription(job: any): string {
     const query = job.message || '';
-    return `Generated from: "${query.slice(0, 80)}${query.length > 80 ? '...' : ''}"`;
+    // 🔧 FIXED: Generate a unique job ID from available data since backend doesn't send jobId
+    const jobId = job.jobId || generateJobIdFromData(job);
+    const status = job.status || 'Unknown';
+    
+    // 🔧 UPDATED: More informative descriptions for unique endpoints
+    return `Job ${jobId} - ${status}: "${query.slice(0, 80)}${query.length > 80 ? '...' : ''}"`;
   }
 
   const copyApiUrl = async (url: string) => {
@@ -204,6 +220,63 @@ export default function MyAPIsPage() {
 
   // Show empty state if no APIs
   if (userAPIs.length === 0) {
+    // Check if there are any jobs that are still processing
+    const processingJobs = uniqueJobs.filter(job => 
+      job.status !== 'completed' && job.message && job.message.length > 0
+    );
+    
+    if (processingJobs.length > 0) {
+      // Show processing jobs instead of empty state
+      return (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Your APIs</h2>
+            <p className="text-gray-600 dark:text-gray-400">Generated endpoints ready to use</p>
+          </div>
+          
+          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8">
+            <h3 className="text-xl font-medium text-gray-900 dark:text-white mb-4">Jobs in Progress</h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              You have {processingJobs.length} indexing job{processingJobs.length !== 1 ? 's' : ''} currently processing. 
+              API endpoints will be available once they complete.
+            </p>
+            
+            <div className="space-y-4">
+              {processingJobs.map((job) => (
+                <div key={job.jobId} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                  <div className="flex-1">
+                    <h4 className="font-medium text-gray-900 dark:text-white">
+                      {generateAPITitle(job)}
+                    </h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {job.message}
+                    </p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${job.progress || 0}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-sm text-gray-500 dark:text-gray-400">
+                        {Math.round(job.progress || 0)}%
+                      </span>
+                    </div>
+                  </div>
+                  <div className="ml-4">
+                    <span className="px-3 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 text-sm font-medium rounded-full">
+                      ⏳ {job.status || 'Processing'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    
+    // No APIs and no processing jobs
     return (
       <div className="space-y-6">
         <div>
@@ -241,23 +314,31 @@ export default function MyAPIsPage() {
       </div>
       
       <div className="grid gap-6">
-        {userAPIs.map((api) => (
-          <div key={api.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{api.title}</h3>
-                    <span className="px-3 py-1 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 text-sm font-medium rounded-full">
-                      ✅ Ready
-                    </span>
-                  </div>
-                  <p className="text-gray-600 dark:text-gray-400 mb-3">{api.description}</p>
-                  <div className="text-sm text-gray-500 dark:text-gray-500">
-                    Created {api.createdAt instanceof Date ? api.createdAt.toLocaleDateString() : new Date(api.createdAt).toLocaleDateString()} • Last used {api.lastUsed}
+        {userAPIs.map((api) => {
+          // 🔧 Type guard to ensure api is not null
+          if (!api) return null;
+          
+          return (
+            <div key={api.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow">
+              <div className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-2">
+                      <h3 className="text-xl font-semibold text-gray-900 dark:text-white">{api.title}</h3>
+                      <span className={`px-3 py-1 text-sm font-medium rounded-full ${
+                        api.status === 'completed' 
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300'
+                          : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300'
+                      }`}>
+                        {api.status === 'completed' ? '✅ Ready' : '⏳ Processing'}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 dark:text-gray-400 mb-3">{api.description}</p>
+                    <div className="text-sm text-gray-500 dark:text-gray-500">
+                      Created {api.createdAt instanceof Date ? api.createdAt.toLocaleDateString() : new Date(api.createdAt).toLocaleDateString()} • Last used {api.lastUsed}
+                    </div>
                   </div>
                 </div>
-              </div>
               
               {/* API URL Section - The most important part */}
               <div className="bg-gray-50 dark:bg-gray-900/50 rounded-xl p-4 mb-4">
@@ -320,7 +401,8 @@ export default function MyAPIsPage() {
               </div>
             </div>
           </div>
-        ))}
+        );
+        })}
       </div>
 
       {/* Pagination */}

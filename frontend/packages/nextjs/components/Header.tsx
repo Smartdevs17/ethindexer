@@ -6,7 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { hardhat } from "viem/chains";
 import { Bars3Icon, BugAntIcon } from "@heroicons/react/24/outline";
-import { Database, Bug, Settings, MessageSquare, Link as LinkIcon, BarChart3, User, ChevronRight } from "lucide-react";
+import { Database, Bug, Settings, MessageSquare, Link as LinkIcon, BarChart3, User, ChevronRight, Hash } from "lucide-react";
 import { FaucetButton, RainbowKitCustomConnectButton } from "~~/components/scaffold-eth";
 import { useOutsideClick, useTargetNetwork } from "~~/hooks/scaffold-eth";
 import { useEthIndexer } from "~~/hooks/ethindexer/useEthIndexer";
@@ -73,6 +73,13 @@ const ethIndexerTabs = [
     icon: LinkIcon, 
     desc: 'Manage your endpoints',
     path: '/app/apis'
+  },
+  { 
+    id: 'blocks', 
+    label: 'Blocks', 
+    icon: Hash, 
+    desc: 'Explore blockchain blocks',
+    path: '/app/blocks'
   },
   { 
     id: 'data', 
@@ -268,8 +275,8 @@ export const Header = () => {
               <h4 className="text-sm font-medium text-gray-300 mb-2">Recent Jobs ({jobs.length})</h4>
               <div className="space-y-2 text-xs max-h-40 overflow-y-auto">
                 {jobs.slice(0, 5).map((job) => (
-                  <div key={job.jobId} className="bg-gray-800 p-2 rounded">
-                    <div>Job: {job.jobId.slice(0, 8)}... ({job.status})</div>
+                  <div key={job.jobId || `job-${Math.random()}`} className="bg-gray-800 p-2 rounded">
+                    <div>Job: {job.jobId?.slice(0, 8) || 'Unknown'}... ({job.status})</div>
                     <div className="text-gray-400">Progress: {job.progress}%</div>
                     {job.apiUrl && (
                       <div className="text-green-400">API: {job.apiUrl}</div>
@@ -289,7 +296,7 @@ export const Header = () => {
                 {transfers.slice(0, 3).map((transfer, index) => (
                   <div key={index} className="bg-gray-800 p-2 rounded">
                     <div>{transfer.token?.symbol || 'Token'}: {transfer.value}</div>
-                    <div className="text-gray-400">{transfer.from.slice(0, 8)}... → {transfer.to.slice(0, 8)}...</div>
+                    <div className="text-gray-400">{transfer.from?.slice(0, 8) || 'Unknown'}... → {transfer.to?.slice(0, 8) || 'Unknown'}...</div>
                   </div>
                 ))}
                 {transfers.length === 0 && (

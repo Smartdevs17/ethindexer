@@ -62,7 +62,7 @@ export default function Home() {
             </div>
             <p className="text-gray-600 dark:text-gray-300 mb-3">You get:</p>
             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800">
-              <code className="text-green-700 dark:text-green-300">GET /api/usdc-transfers</code>
+              <code className="text-green-700 dark:text-green-300">GET /api/dynamic/usdc-transfers</code>
             </div>
           </div>
         </div>
