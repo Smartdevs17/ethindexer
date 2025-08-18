@@ -106,13 +106,13 @@ export const Header = () => {
               <Database className="h-8 w-8 text-blue-600" />
               <div className="flex flex-col">
                 <span className="font-bold leading-tight">EthIndexer</span>
-                <span className="text-xs">AI-Powered Blockchain APIs</span>
+                {/* <span className="text-xs">AI-Powered Blockchain APIs</span> */}
               </div>
             </div>
           </Link>
           
           {/* EthIndexer Brand when in app section */}
-          {isInEthIndexerApp && (
+          {/* {isInEthIndexerApp && (
             <div className="flex items-center space-x-2 ml-4">
               <Database className="h-6 w-6 text-blue-600" />
               <div className="flex flex-col">
@@ -120,20 +120,20 @@ export const Header = () => {
                 <span className="text-xs">Application</span>
               </div>
             </div>
-          )}
+          )} */}
           
           {/* Navigation Links */}
-          <ul className="hidden lg:flex lg:flex-nowrap menu menu-horizontal px-1 gap-2">
+          {/* <ul className="hidden lg:flex lg:flex-nowrap menu menu-horizontal px-1 gap-2">
             <HeaderMenuLinks />
-          </ul>
+          </ul> */}
         </div>
         
         <div className="navbar-end flex items-center justify-end w-full">
           {/* EthIndexer Status when in app section */}
           {isInEthIndexerApp && (
             <div className="flex items-center gap-2 mr-4">
-              <ConnectionStatus className="hidden sm:flex" />
-              <button
+              {/* <ConnectionStatus className="hidden sm:flex" /> */}
+              {/* <button
                 onClick={() => setShowDebugPanel(!showDebugPanel)}
                 className={`p-2 rounded-lg transition-colors ${
                   showDebugPanel 
@@ -143,7 +143,7 @@ export const Header = () => {
                 title="Toggle Debug Panel"
               >
                 <Bug className="h-4 w-4" />
-              </button>
+              </button> */}
             </div>
           )}
           
