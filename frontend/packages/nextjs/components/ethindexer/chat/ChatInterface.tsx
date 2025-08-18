@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, CheckCircle, AlertCircle, Loader2, Sparkles } from "lucide-react";
+import { Send, Bot, User, CheckCircle, AlertCircle, Loader2, Sparkles, Database, Zap, Hash } from "lucide-react";
 
 export interface Message {
   id: string;
@@ -151,7 +151,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           if (jobId) {
             addMessage({
               type: "system",
-              content: `✅ Successfully created indexing job! Job ID: ${jobId}\n\nYou can view your API in the "My APIs" section.`,
+              content: `🎉 Perfect! I've created your blockchain data API. Your job is now running and will be ready shortly.`,
               metadata: {
                 jobId: jobId,
                 config: config,
@@ -160,7 +160,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           } else {
             addMessage({
               type: "system",
-              content: "✅ Job created successfully!\n\nYou can view your API in the \"My APIs\" section.",
+              content: `🎉 Great! I've created your blockchain data API. It's now processing your request.`,
               metadata: { config: result },
             });
           }
@@ -169,9 +169,9 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           setTimeout(() => {
             addMessage({
               type: "assistant",
-              content: "Your indexing job is now running! You can:\n\n• Go to \"My APIs\" to see your created API\n• Check the \"Data\" page to see live blockchain data\n• Create more APIs by continuing our conversation",
+              content: `Your API is being generated! Here's what you can do next:\n\n• Check your APIs to see the endpoint\n• View live blockchain data\n• Create more APIs by asking me more questions`,
               metadata: {
-                suggestions: ["Go to My APIs", "View Live Data", "Create Another API"]
+                suggestions: ["View My APIs", "See Live Data", "Ask Another Question"]
               }
             });
           }, 1000);
@@ -179,9 +179,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           console.error("❌ onExecuteQuery failed:", error);
           addMessage({
             type: "system",
-            content: `❌ Failed to create job: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            content: `❌ Sorry, I couldn't create your API right now. Please try again in a moment.`,
           });
         }
       }
@@ -190,7 +188,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       addMessage({
         type: "assistant",
-        content: "I'm having trouble processing your request. Please try again or contact support if the issue persists.",
+        content: "I'm having trouble processing your request right now. Please try again or ask me something else!",
         metadata: {
           isQueryReady: false,
           confidence: 0,
@@ -211,7 +209,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       addMessage({
         type: "system",
-        content: `Creating indexing job for: ${query}`,
+        content: `Creating your blockchain data API...`,
       });
 
       const result = await onExecuteQuery(query);
@@ -220,7 +218,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       if (jobId) {
         addMessage({
           type: "system",
-          content: `✅ Indexing job created successfully! Job ID: ${jobId}`,
+          content: `🎉 Success! Your blockchain data API is now being created.`,
           metadata: {
             jobId: jobId,
             config: result.config || result.result?.config,
@@ -229,7 +227,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       } else {
         addMessage({
           type: "system",
-          content: "✅ Indexing job created successfully!",
+          content: `🎉 Perfect! Your blockchain data API is now being created.`,
           metadata: { config: result },
         });
       }
@@ -237,9 +235,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       console.error("❌ Direct query execution failed:", error);
       addMessage({
         type: "system",
-        content: `❌ Failed to create indexing job: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`,
+        content: `❌ Sorry, I couldn't create your API right now. Please try again.`,
       });
     }
   };
@@ -247,11 +243,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   // Handle suggestion clicks
   const handleSuggestionClick = (suggestion: string) => {
     // Check if it's a navigation suggestion
-    if (suggestion === "Go to My APIs") {
+    if (suggestion === "View My APIs") {
       window.location.href = "/app/apis";
-    } else if (suggestion === "View Live Data") {
+    } else if (suggestion === "See Live Data") {
       window.location.href = "/app/data";
-    } else if (suggestion === "Create Another API") {
+    } else if (suggestion === "Ask Another Question") {
       // Clear the conversation and start fresh
       setMessages([]);
       setConversationHistory([]);
@@ -279,39 +275,47 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     {
       title: "Track Popular Tokens",
       description: "USDC, WETH, DAI transfers",
-      query: "Index transfers for popular tokens like USDC and WETH"
+      query: "Index transfers for popular tokens like USDC and WETH",
+      icon: "🏆",
+      color: "from-blue-500 to-blue-600"
     },
     {
       title: "Monitor My Wallet", 
       description: "All transactions to/from your wallet",
-      query: "Track all transactions involving my wallet address"
+      query: "Track all transactions involving my wallet address",
+      icon: "👛",
+      color: "from-purple-500 to-purple-600"
     },
     {
       title: "Large Transactions",
       description: "High-value transfers across all tokens", 
-      query: "Index transactions above $100,000 in value"
+      query: "Index transactions above $100,000 in value",
+      icon: "💰",
+      color: "from-green-500 to-green-600"
     },
     {
       title: "DeFi Activity",
       description: "DEX swaps, lending, liquidity",
-      query: "Track DeFi protocol interactions and token swaps"
+      query: "Track DeFi protocol interactions and token swaps",
+      icon: "🔄",
+      color: "from-orange-500 to-orange-600"
     }
   ];
 
   return (
-    <div className={`flex flex-col h-full bg-white dark:bg-gray-800 ${className || ''}`}>
+    <div className={`flex flex-col h-full bg-gradient-to-br from-gray-50 to-blue-50 dark:from-gray-900 dark:to-gray-800 ${className || ''}`}>
       {/* Header */}
-      <div className="flex-shrink-0 p-6 border-b border-gray-200 dark:border-gray-700">
-        <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <Bot className="h-6 w-6 text-white" />
+      <div className="flex-shrink-0 p-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-t-2xl">
+        <div className="flex items-center space-x-4">
+          <div className="w-12 h-12 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center">
+            <Bot className="h-7 w-7 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-              AI Assistant
+            <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+              Blockchain Data Assistant
             </h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              Describe what blockchain data you want to track
+            <p className="text-gray-600 dark:text-gray-400">
+              Ask me anything about blockchain data you want to track
             </p>
           </div>
         </div>
@@ -319,50 +323,64 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Messages Area */}
       <div className="flex-1 overflow-hidden">
-        <div className="h-full overflow-y-auto p-6 space-y-4">
+        <div className="h-full overflow-y-auto p-6 space-y-6">
           {/* Welcome Message */}
           {messages.length === 0 && (
-            <div className="space-y-6">
+            <div className="space-y-8">
               <div className="text-center">
-                <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Sparkles className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                <div className="w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Sparkles className="h-10 w-10 text-white" />
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
-                  Welcome to EthIndexer AI
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+                  Hi! I'm your Blockchain Data Assistant
                 </h3>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  I can help you create custom APIs for blockchain data. Just tell me what you want to track!
+                <p className="text-gray-600 dark:text-gray-400 text-lg mb-8 max-w-2xl mx-auto">
+                  I can help you create custom APIs for any blockchain data you want to track. 
+                  Just tell me what you're looking for in plain English!
                 </p>
               </div>
 
               {/* Quick Actions */}
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Quick Actions:
+              <div className="space-y-4">
+                <p className="text-lg font-medium text-gray-700 dark:text-gray-300 text-center">
+                  Try these examples:
                 </p>
-                <div className="grid gap-3">
+                <div className="grid gap-4 max-w-2xl mx-auto">
                   {quickActions.map((action, index) => (
                     <button
                       key={index}
                       onClick={() => handleDirectQuery(action.query)}
                       disabled={isProcessing || isTyping}
-                      className="text-left p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors border border-gray-200 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed group"
+                      className="text-left p-6 bg-white dark:bg-gray-800 rounded-2xl hover:shadow-lg transition-all transform hover:scale-105 border border-gray-200 dark:border-gray-700 disabled:opacity-50 disabled:cursor-not-allowed group shadow-md"
                     >
-                      <div className="flex items-start space-x-3">
-                        <div className="w-8 h-8 bg-blue-100 dark:bg-blue-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <Sparkles className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div className="flex items-start space-x-4">
+                        <div className={`w-12 h-12 bg-gradient-to-r ${action.color} rounded-xl flex items-center justify-center flex-shrink-0 text-2xl`}>
+                          {action.icon}
                         </div>
                         <div>
-                          <h4 className="font-medium text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                          <h4 className="text-lg font-semibold text-gray-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 mb-2">
                             {action.title}
                           </h4>
-                          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          <p className="text-gray-600 dark:text-gray-400">
                             {action.description}
                           </p>
                         </div>
                       </div>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* Tips */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 rounded-2xl p-6 max-w-2xl mx-auto">
+                <h4 className="font-semibold text-blue-900 dark:text-blue-300 mb-3 text-center">
+                  💡 Pro Tips
+                </h4>
+                <div className="space-y-2 text-sm text-blue-800 dark:text-blue-400">
+                  <p>• Be specific: "Show me USDC transfers above $10,000"</p>
+                  <p>• Include time ranges: "from the last 1000 blocks"</p>
+                  <p>• Mention specific addresses: "involving wallet 0x..."</p>
+                  <p>• Ask naturally: "I want to track DeFi activity"</p>
                 </div>
               </div>
             </div>
@@ -375,46 +393,45 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
               className={`flex ${message.type === "user" ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                className={`max-w-[80%] rounded-2xl px-6 py-4 shadow-md ${
                   message.type === "user"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
                     : message.type === "system"
-                    ? "bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300 border border-green-200 dark:border-green-800"
-                    : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white"
+                    ? "bg-gradient-to-r from-green-500 to-green-600 text-white"
+                    : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-700"
                 }`}
               >
-                <div className="flex items-start space-x-2">
+                <div className="flex items-start space-x-3">
                   {message.type === "user" ? (
-                    <User className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <User className="h-5 w-5 mt-1 flex-shrink-0" />
                   ) : message.type === "system" ? (
-                    <CheckCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <CheckCircle className="h-5 w-5 mt-1 flex-shrink-0" />
                   ) : (
-                    <Bot className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <Bot className="h-5 w-5 mt-1 flex-shrink-0 text-blue-600 dark:text-blue-400" />
                   )}
                   <div className="flex-1">
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
                     {message.metadata?.jobId && (
-                      <p className="text-xs opacity-75 mt-1">
+                      <p className="text-xs opacity-75 mt-2 font-mono">
                         Job ID: {message.metadata.jobId}
                       </p>
                     )}
-
                   </div>
                 </div>
                 
                 {/* Suggestion Chips */}
                 {message.metadata?.suggestions && message.metadata.suggestions.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-3">
+                  <div className="flex flex-wrap gap-2 mt-4">
                     {message.metadata.suggestions.map((suggestion, index) => {
-                      const isNavigation = suggestion.startsWith("Go to") || suggestion.startsWith("View") || suggestion === "Create Another API";
+                      const isNavigation = suggestion.startsWith("View") || suggestion.startsWith("See") || suggestion === "Ask Another Question";
                       return (
                         <button
                           key={index}
                           onClick={() => handleSuggestionClick(suggestion)}
-                          className={`px-3 py-1 rounded-full text-sm whitespace-nowrap transition-colors border ${
+                          className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-all transform hover:scale-105 border ${
                             isNavigation
-                              ? "bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/50 border-green-200 dark:border-green-800"
-                              : "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/50 border-blue-200 dark:border-blue-800"
+                              ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 border-green-200 dark:border-green-800"
+                              : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 border-blue-200 dark:border-blue-800"
                           }`}
                         >
                           {isNavigation && "🔗 "}
@@ -427,22 +444,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
                 {/* Execute Query Button */}
                 {message.metadata?.isQueryReady && message.metadata?.suggestedQuery && (
-                  <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-600">
-                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 mb-3">
-                      <p className="text-xs text-blue-800 dark:text-blue-300 font-medium mb-1">
-                        Ready to execute:
+                  <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-600">
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 mb-4">
+                      <p className="text-xs text-blue-800 dark:text-blue-300 font-semibold mb-2">
+                        ✨ Ready to create your API:
                       </p>
                       <p className="text-sm text-blue-900 dark:text-blue-200">
                         {message.metadata.suggestedQuery}
                       </p>
                     </div>
                     <button
-                      onClick={() => handleUserMessage(`Execute: ${message.metadata?.suggestedQuery || ''}`)}
+                      onClick={() => handleUserMessage(`Create this API: ${message.metadata?.suggestedQuery || ''}`)}
                       disabled={isProcessing || isTyping}
-                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm font-medium"
+                      className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-xl hover:from-blue-700 hover:to-purple-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 shadow-lg text-sm font-semibold"
                     >
                       <Sparkles className="h-4 w-4 inline mr-2" />
-                      Execute Query
+                      Create My API
                     </button>
                   </div>
                 )}
@@ -453,12 +470,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           {/* Typing Indicator */}
           {isTyping && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-3 max-w-xs">
-                <div className="flex items-center space-x-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-gray-500" />
-                  <span className="text-sm text-gray-600 dark:text-gray-300">
-                    AI is analyzing your request...
-                  </span>
+              <div className="bg-white dark:bg-gray-800 rounded-2xl px-6 py-4 max-w-xs shadow-md border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-white" />
+                  </div>
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -469,25 +490,25 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Input Area */}
-      <div className="flex-shrink-0 p-6 border-t border-gray-200 dark:border-gray-700">
-        <form onSubmit={handleSubmit} className="flex space-x-3">
+      <div className="flex-shrink-0 p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-2xl">
+        <form onSubmit={handleSubmit} className="flex space-x-4">
           <div className="flex-1 relative">
             <textarea
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
-              placeholder="Describe what blockchain data you want to track..."
+              placeholder="Ask me about blockchain data you want to track..."
               disabled={isProcessing || isTyping}
-              rows={3}
-              className="w-full px-4 py-3 text-sm bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none"
+              rows={2}
+              className="w-full px-6 py-4 text-base bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 resize-none shadow-sm"
             />
           </div>
           <button
             type="submit"
             disabled={!inputValue.trim() || isProcessing || isTyping}
-            className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            className="px-6 py-4 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-2xl hover:from-blue-700 hover:to-purple-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 shadow-lg"
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-5 w-5" />
           </button>
         </form>
       </div>

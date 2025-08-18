@@ -51,51 +51,7 @@ export const HeaderMenuLinks = () => {
   );
 };
 
-// EthIndexer app navigation tabs
-const ethIndexerTabs = [
-  { 
-    id: 'query', 
-    label: 'Create API', 
-    icon: MessageSquare, 
-    desc: 'Generate new endpoints',
-    path: '/app/query'
-  },
-  { 
-    id: 'jobs', 
-    label: 'Jobs', 
-    icon: Database, 
-    desc: 'Track job history',
-    path: '/app/jobs'
-  },
-  { 
-    id: 'apis', 
-    label: 'My APIs', 
-    icon: LinkIcon, 
-    desc: 'Manage your endpoints',
-    path: '/app/apis'
-  },
-  { 
-    id: 'blocks', 
-    label: 'Blocks', 
-    icon: Hash, 
-    desc: 'Explore blockchain blocks',
-    path: '/app/blocks'
-  },
-  { 
-    id: 'data', 
-    label: 'Live Data', 
-    icon: BarChart3, 
-    desc: 'Explore blockchain data',
-    path: '/app/data'
-  },
-  { 
-    id: 'profile', 
-    label: 'Profile', 
-    icon: User, 
-    desc: 'Account settings',
-    path: '/app/profile'
-  }
-];
+
 
 /**
  * Site header with unified functionality for both Scaffold-ETH and EthIndexer
@@ -124,16 +80,7 @@ export const Header = () => {
   // Check if we're in the EthIndexer app section
   const isInEthIndexerApp = pathname.startsWith('/app');
   
-  // Get active tab for EthIndexer navigation
-  const getActiveTab = () => {
-    if (!isInEthIndexerApp) return null;
-    const currentTab = ethIndexerTabs.find(tab => pathname.startsWith(tab.path));
-    return currentTab?.id || 'query';
-  };
 
-  const navigateToTab = (path: string) => {
-    window.location.href = path;
-  };
 
   return (
     <>
@@ -207,34 +154,7 @@ export const Header = () => {
         </div>
       </div>
 
-      {/* EthIndexer Navigation when in app section */}
-      {isInEthIndexerApp && (
-        <nav className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6">
-          <div className="flex space-x-8">
-            {ethIndexerTabs.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = getActiveTab() === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => navigateToTab(tab.path)}
-                  className={`flex items-center space-x-2 py-4 border-b-2 transition-colors ${
-                    isActive
-                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                      : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
-                  }`}
-                >
-                  <Icon className="h-5 w-5" />
-                  <div className="text-left">
-                    <div className="font-medium">{tab.label}</div>
-                    <div className="text-xs text-gray-400 dark:text-gray-500">{tab.desc}</div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </nav>
-      )}
+
 
       {/* Status Bar (if system status exists) */}
       {isInEthIndexerApp && systemStatus && (

@@ -160,9 +160,9 @@ export default function MyAPIsPage() {
   // Show wallet connection requirement if not connected
   if (!isConnected) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h1>
           <p className="text-gray-600 dark:text-gray-300">Connect your wallet to view your indexing APIs</p>
         </div>
         
@@ -181,9 +181,9 @@ export default function MyAPIsPage() {
   // Show authentication loading if connected but not authenticated
   if (isConnected && !isAuthenticated) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Your APIs</h1>
           <p className="text-gray-600 dark:text-gray-300">Loading your APIs...</p>
         </div>
         
@@ -201,9 +201,9 @@ export default function MyAPIsPage() {
   // Show connection status
   if (!isBackendConnected) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Your APIs</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Your APIs</h1>
           <p className="text-gray-600 dark:text-gray-400">Generated endpoints ready to use</p>
         </div>
         
@@ -228,9 +228,9 @@ export default function MyAPIsPage() {
     if (processingJobs.length > 0) {
       // Show processing jobs instead of empty state
       return (
-        <div className="space-y-6">
+        <div className="space-y-6 p-6">
           <div>
-            <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Your APIs</h2>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Your APIs</h1>
             <p className="text-gray-600 dark:text-gray-400">Generated endpoints ready to use</p>
           </div>
           
@@ -302,10 +302,10 @@ export default function MyAPIsPage() {
 
   // Show beautiful API cards (user-focused, no technical jargon)
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Your APIs</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Your APIs</h1>
           <p className="text-gray-600 dark:text-gray-400">Generated endpoints ready to use</p>
         </div>
         <div className="text-sm text-gray-500 dark:text-gray-400">

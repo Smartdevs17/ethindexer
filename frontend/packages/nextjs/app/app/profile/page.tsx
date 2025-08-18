@@ -86,9 +86,9 @@ export default function ProfilePage() {
 
   if (!isConnected) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Profile & Settings</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Profile & Settings</h1>
           <p className="text-gray-600 dark:text-gray-300">Connect your wallet to manage your account</p>
         </div>
         
@@ -104,9 +104,9 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div>
-        <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Profile & Settings</h2>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Profile & Settings</h1>
         <p className="text-gray-600 dark:text-gray-300">Manage your wallet connections and preferences</p>
       </div>
       

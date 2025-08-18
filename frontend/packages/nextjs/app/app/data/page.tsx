@@ -65,9 +65,9 @@ export default function LiveDataPage() {
 
   if (isLoading && !stats) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6 p-6">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Live Blockchain Data</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Live Blockchain Data</h1>
           <p className="text-gray-600 dark:text-gray-300">Real-time insights from your indexed data</p>
         </div>
         <div className="flex items-center justify-center py-12">
@@ -79,10 +79,10 @@ export default function LiveDataPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-6">
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Live Blockchain Data</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Live Blockchain Data</h1>
           <p className="text-gray-600 dark:text-gray-300">Real-time insights from your indexed data</p>
           {lastUpdated && (
             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">

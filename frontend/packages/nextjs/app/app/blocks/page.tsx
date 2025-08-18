@@ -474,11 +474,11 @@ export default function BlocksPage() {
   const totalPages = Math.ceil(totalBlocks / itemsPerPage);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
+    <div className="space-y-6 p-6">
+      {/* Page Header */}
       <div className="flex justify-between items-start">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Blocks Explorer</h2>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Blocks Explorer</h1>
           <p className="text-gray-600 dark:text-gray-400">Explore blockchain blocks aggregated from ERC-20 transfer activity</p>
         </div>
         
