@@ -71,7 +71,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
 
   return (
     <div className={`bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out h-full flex flex-col ${
-      isCollapsed ? 'w-16' : 'w-64'
+      isCollapsed ? 'w-16' : 'w-72'
     }`}>
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
@@ -82,7 +82,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
         )}
         <button
           onClick={onToggle}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className={`p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${
+            isCollapsed ? 'mx-auto' : ''
+          }`}
           title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
           {isCollapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
@@ -90,7 +92,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
       </div>
 
       {/* Navigation Items */}
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+      <nav className="flex-1 p-4 space-y-3 overflow-y-auto">
         {navigationItems.map((item) => {
           const isActive = pathname === item.href;
           const Icon = item.icon;
@@ -99,10 +101,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
             <Link
               key={item.name}
               href={item.href}
-              className={`group flex items-center justify-center px-3 py-3 rounded-xl transition-all duration-200 ${
+              className={`group flex items-center px-4 py-3 rounded-xl transition-all duration-200 ${
                 isCollapsed 
-                  ? 'w-10 h-10 mx-auto' // Center the icon when collapsed
-                  : 'space-x-3' // Add space between icon and text when expanded
+                  ? 'w-10 h-10 mx-auto justify-center' // Center the icon when collapsed
+                  : 'justify-start' // Left-align when expanded
               } ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
@@ -114,7 +116,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isCollapsed, onToggle }) => {
               }`} />
               
               {!isCollapsed && (
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 ml-3">
                   <div className="text-sm font-medium truncate">{item.name}</div>
                   <div className="text-xs text-gray-500 dark:text-gray-400 truncate">
                     {item.description}

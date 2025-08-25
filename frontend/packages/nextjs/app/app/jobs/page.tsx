@@ -50,6 +50,8 @@ export default function JobsPage() {
     forceRefreshJobs 
   } = useEthIndexer();
 
+
+
   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
   // Show wallet connection requirement if not connected
@@ -96,8 +98,8 @@ export default function JobsPage() {
   // Filter and sort jobs
   const filteredJobs = jobs
     .filter(job => {
-      // Filter out jobs without valid jobId
-      if (!job.jobId) {
+      // Filter out jobs without valid jobId or id
+      if (!job.jobId && !job.id) {
         return false;
       }
       
@@ -138,6 +140,8 @@ export default function JobsPage() {
       const dateB = b.timestamp instanceof Date ? b.timestamp : new Date(b.timestamp);
       return dateB.getTime() - dateA.getTime();
     });
+
+
 
   // Pagination
   const totalJobs = filteredJobs.length;
@@ -205,6 +209,29 @@ export default function JobsPage() {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // 🔧 NEW: Generate a unique job ID from available job data
+  function generateJobIdFromData(job: any): string {
+    // Try to create a unique ID from timestamp and message hash
+    if (job.timestamp) {
+      const timestamp = new Date(job.timestamp).getTime();
+      const messageHash = job.message ? job.message.split(' ').join('').slice(0, 8) : 'job';
+      return `${messageHash}-${timestamp}`;
+    }
+    
+    // Fallback to a random ID if no timestamp
+    return `job-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  }
+
+  function generateAPIDescription(job: any): string {
+    const query = job.message || '';
+    // 🔧 FIXED: Generate a unique job ID from available data since backend doesn't send jobId
+    const jobId = job.jobId || job.id || generateJobIdFromData(job);
+    const status = job.status || 'Unknown';
+    
+    // 🔧 UPDATED: More informative descriptions for unique endpoints
+    return `Job ${jobId} - ${status}: "${query.slice(0, 80)}${query.length > 80 ? '...' : ''}"`;
+  }
 
   return (
     <div className="space-y-6 p-6">

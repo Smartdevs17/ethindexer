@@ -86,11 +86,9 @@ export const UserFocusedLayout: React.FC<UserFocusedLayoutProps> = ({
         )}
 
         {/* Main Content */}
-        <div className={`flex-1 transition-all duration-300 overflow-auto ${
-          showSidebar ? (isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64') : ''
-        }`}>
+        <div className="flex-1 transition-all duration-300 overflow-auto">
           {/* Main Content Area */}
-          <main className="min-h-full">
+          <main className="min-h-full p-4 md:p-6 lg:p-8">
             {children}
           </main>
         </div>

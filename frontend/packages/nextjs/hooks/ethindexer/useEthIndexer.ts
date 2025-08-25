@@ -5,6 +5,7 @@ import { useAccount } from 'wagmi';
 
 interface Job {
   jobId: string;
+  id?: string; // Add optional id property for backend compatibility
   message: string;
   progress: number;
   status: string;
@@ -375,7 +376,7 @@ export const useEthIndexer = () => {
         console.log('📥 Raw jobs data from API:', data);
         
         // Convert jobs with proper timestamp handling and generate API URLs
-        const jobsWithTimestamps = (data.jobs || []).map((job: any) => {
+        const jobsWithTimestamps = (data.jobs || []).map((job: any, index: number) => {
           console.log(`🕐 Converting job ${job.id} timestamp:`, {
             original: job.timestamp,
             type: typeof job.timestamp,
@@ -383,8 +384,9 @@ export const useEthIndexer = () => {
             updatedAt: job.updatedAt
           });
           
-          // Convert timestamp to Date object
-          const timestamp = safeTimestampToDate(job.timestamp, new Date());
+          // Convert timestamp to Date object with robust fallbacks
+          const rawTimestamp = job.timestamp || job.createdAt || job.updatedAt;
+          const timestamp = safeTimestampToDate(rawTimestamp, new Date());
           
           // Generate API URL based on job message
           let apiUrl: string | undefined;
@@ -393,32 +395,33 @@ export const useEthIndexer = () => {
           
           if (job.status === 'completed' && job.message) {
             const message = job.message.toLowerCase();
+            // All endpoints now use the dynamic API with token filtering
             if (message.includes('usdc')) {
-              apiUrl = '/api/usdc-transfers';
+              apiUrl = '/api/dynamic/transfers?token=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
               apiDescription = 'USDC transfer data';
               apiStatus = 'ready';
             } else if (message.includes('weth')) {
-              apiUrl = '/api/weth-transfers';
+              apiUrl = '/api/dynamic/transfers?token=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
               apiDescription = 'WETH transfer data';
               apiStatus = 'ready';
             } else if (message.includes('dai')) {
-              apiUrl = '/api/dai-transfers';
+              apiUrl = '/api/dynamic/transfers?token=0x6b175474e89094c44da98b954eedeac495271d0f';
               apiDescription = 'DAI transfer data';
               apiStatus = 'ready';
             } else if (message.includes('usdt')) {
-              apiUrl = '/api/usdt-transfers';
+              apiUrl = '/api/dynamic/transfers?token=0xdac17f958d2ee523a2206206994597c13d831ec7';
               apiDescription = 'USDT transfer data';
               apiStatus = 'ready';
             } else {
-              // Generic API endpoint
-              apiUrl = '/api/transfers';
+              // Generic API endpoint - use dynamic API
+              apiUrl = '/api/dynamic/transfers';
               apiDescription = 'General transfer data';
               apiStatus = 'ready';
             }
           }
           
           return {
-            jobId: job.id,
+            jobId: job.jobId || job.id,
             message: job.message || 'Unknown job',
             progress: job.progress || 0,
             status: job.status || 'unknown',
@@ -523,7 +526,7 @@ export const useEthIndexer = () => {
   const fetchTransfers = async () => {
     try {
       console.log('📡 Fetching transfers from API...');
-      const response = await fetch(`${apiUrl}/api/transfers?limit=50&sortBy=timestamp&sortOrder=DESC`);
+      const response = await fetch(`${apiUrl}/api/dynamic/transfers?limit=50&sortBy=timestamp&sortOrder=DESC`);
       
       if (response.ok) {
         const data = await response.json();
