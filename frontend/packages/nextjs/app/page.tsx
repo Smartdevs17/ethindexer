@@ -3,23 +3,33 @@
 import React, { useState } from 'react';
 import { ArrowRight, Sparkles, Bot, Database, Zap, MessageSquare, Play, CheckCircle, Hash, TrendingUp, Globe, Shield } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useAccount } from 'wagmi';
 import { RainbowKitCustomConnectButton } from '../components/scaffold-eth';
 
 export default function HomePage() {
   const [demoQuery, setDemoQuery] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [showResult, setShowResult] = useState(false);
+  
+  const { isConnected } = useAccount();
+  const router = useRouter();
 
   const handleDemoQuery = async () => {
     if (!demoQuery.trim()) return;
     
-    setIsProcessing(true);
-    // Simulate processing
-    setTimeout(() => {
-      setIsProcessing(false);
-      setShowResult(true);
-    }, 2000);
+    // Check if wallet is connected
+    if (!isConnected) {
+      // Show toaster message requiring wallet connection
+      alert('Please connect your wallet first to create blockchain data APIs.');
+      return;
+    }
+    
+    // If wallet is connected, redirect to dashboard
+    router.push('/app/query');
   };
+
+  // No longer need wallet prompt logic
 
   const exampleQueries = [
     "Show me all USDC transfers above $10,000",
@@ -209,14 +219,25 @@ export default function HomePage() {
 
           {/* CTA Buttons */}
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link
-              href="/app/query"
-              className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
-            >
-              <Sparkles className="h-5 w-5" />
-              <span className="text-lg font-semibold">Start Creating APIs</span>
-              <ArrowRight className="h-5 w-5" />
-            </Link>
+            {isConnected ? (
+              <Link
+                href="/app/query"
+                className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
+              >
+                <Sparkles className="h-5 w-5" />
+                <span className="text-lg font-semibold">Go to Dashboard</span>
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            ) : (
+              <button
+                onClick={() => alert('Please connect your wallet first to start creating blockchain data APIs.')}
+                className="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg cursor-pointer"
+              >
+                <Sparkles className="h-5 w-5" />
+                <span className="text-lg font-semibold">Start Creating APIs</span>
+                <ArrowRight className="h-5 w-5" />
+              </button>
+            )}
             <Link
               href="/app/apis"
               className="flex items-center space-x-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-white px-8 py-4 rounded-xl border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -313,6 +334,18 @@ export default function HomePage() {
                 1
               </div>
               <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-3">
+                Connect Wallet
+              </h3>
+              <p className="text-gray-600 dark:text-gray-400">
+                Connect your wallet to get started. This ensures your queries are secure and personalized.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold">
+                2
+              </div>
+              <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-3">
                 Ask Naturally
               </h3>
               <p className="text-gray-600 dark:text-gray-400">
@@ -322,38 +355,37 @@ export default function HomePage() {
 
             <div className="text-center">
               <div className="w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold">
-                2
-              </div>
-              <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-3">
-                AI Generates API
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400">
-                Our AI understands your request and creates a custom API endpoint for your data.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="w-20 h-20 bg-gradient-to-r from-blue-600 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold">
                 3
               </div>
               <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-3">
-                Use Your Data
+                Get Your API
               </h3>
               <p className="text-gray-600 dark:text-gray-400">
-                Access live blockchain data through your generated API. Integrate it into any application.
+                Our AI creates a custom API endpoint for your data. Access live blockchain data instantly.
               </p>
             </div>
           </div>
 
           <div className="text-center mt-12">
-            <Link
-              href="/app/query"
-              className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
-            >
-              <Sparkles className="h-5 w-5" />
-              <span className="text-lg font-semibold">Start Creating Your First API</span>
-              <ArrowRight className="h-5 w-5" />
-            </Link>
+            {isConnected ? (
+              <Link
+                href="/app/query"
+                className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg"
+              >
+                <Sparkles className="h-5 w-5" />
+                <span className="text-lg font-semibold">Go to Dashboard</span>
+                <ArrowRight className="h-5 w-5" />
+              </Link>
+            ) : (
+              <button
+                onClick={() => alert('Please connect your wallet first to start creating blockchain data APIs.')}
+                className="inline-flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-xl hover:from-blue-700 hover:to-purple-700 transition-all transform hover:scale-105 shadow-lg cursor-pointer"
+              >
+                <Sparkles className="h-5 w-5" />
+                <span className="text-lg font-semibold">Start Creating Your First API</span>
+                <ArrowRight className="h-5 w-5" />
+              </button>
+            )}
           </div>
         </div>
       </section>
