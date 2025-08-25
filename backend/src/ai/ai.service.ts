@@ -72,9 +72,21 @@ IMPORTANT: Return ONLY the JSON object, no other text.
       
       const config = JSON.parse(content);
       
+      // 🔧 FIX: If AI doesn't provide addresses, include popular tokens by default
+      let addresses = Array.isArray(config.addresses) ? config.addresses : [];
+      if (addresses.length === 0) {
+        // Include popular tokens for generic queries
+        addresses = [
+          '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+          '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
+          '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+          '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
+        ];
+      }
+      
       // Validate and clean the response
       const cleanConfig: IndexingConfig = {
-        addresses: Array.isArray(config.addresses) ? config.addresses : [],
+        addresses,
         events: Array.isArray(config.events) ? config.events : ['Transfer'],
         fromBlock: typeof config.fromBlock === 'number' ? config.fromBlock : null,
         toBlock: typeof config.toBlock === 'number' ? config.toBlock : null,
@@ -120,13 +132,25 @@ IMPORTANT: Return ONLY the JSON object, no other text.
       if (blocks.length >= 2) toBlock = blocks[1];
     }
     
+    // 🔧 FIX: If no specific addresses provided, include popular tokens by default
+    let addresses = addressMatches;
+    if (addresses.length === 0) {
+      // Include popular tokens for generic queries
+      addresses = [
+        '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
+        '0xdac17f958d2ee523a2206206994597c13d831ec7', // USDT
+        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH
+        '0x6b175474e89094c44da98b954eedeac495271d0f', // DAI
+      ];
+    }
+    
     // Determine API endpoint base based on content
     let apiEndpointBase = 'generic-data';
     if (lowerQuery.includes('usdc')) apiEndpointBase = 'usdc-transfers';
     else if (lowerQuery.includes('usdt')) apiEndpointBase = 'usdt-transfers';
     else if (lowerQuery.includes('weth')) apiEndpointBase = 'weth-transfers';
     else if (lowerQuery.includes('dai')) apiEndpointBase = 'dai-transfers';
-    else if (addressMatches.length > 0) apiEndpointBase = 'address-transfers';
+    else if (addresses.length > 0) apiEndpointBase = 'address-transfers';
     
     // Note: The actual unique endpoint will be generated when the job is created
     // This is just the base pattern
@@ -139,7 +163,7 @@ IMPORTANT: Return ONLY the JSON object, no other text.
     }
     
     return {
-      addresses: addressMatches,
+      addresses,
       events: ['Transfer'],
       fromBlock,
       toBlock,
