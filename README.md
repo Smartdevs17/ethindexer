@@ -8,16 +8,20 @@ EthIndexer is an intelligent blockchain data indexing platform that allows users
 
 ### ✅ Currently Available
 - **Natural Language Processing**: Index blockchain data using simple English commands
-- **ERC-20 Transfer Indexing**: Real-time indexing of token transfers
-- **AI-Powered Query Parsing**: OpenAI integration for intelligent command interpretation
-- **Dynamic API Generation**: Auto-generated REST endpoints based on AI-parsed queries
-- **Type-Safe Database**: Prisma ORM with full TypeScript support
-- **Real-time Updates**: WebSocket streaming for live blockchain data
-- **Modular Architecture**: NestJS framework for scalable, maintainable code
-- **Production Ready**: Built with enterprise-grade tools and patterns
+- **ERC-20 Transfer Indexing**: Real-time indexing of token transfers with tier-based storage
+- **AI-Powered Query Parsing**: OpenAI GPT-4 integration for intelligent command interpretation
+- **Dynamic API Generation**: Auto-generated REST endpoints with caching and performance optimization
+- **User Management**: Wallet-based authentication with ENS name resolution
+- **Job Orchestration**: Advanced indexing job management with priority and tier systems
+- **Real-time Updates**: WebSocket streaming for live blockchain data and job progress
+- **Block Explorer**: Comprehensive block data with gas analysis and transaction details
+- **Live Data Streaming**: Real-time blockchain data access with filtering capabilities
+- **Chat Interface**: Interactive AI-powered query builder with natural language processing
+- **Frontend Dashboard**: Complete Scaffold-ETH 2 based interface with analytics
+- **Type-Safe Database**: Prisma ORM with PostgreSQL and comprehensive indexing
+- **Production Ready**: Built with enterprise-grade tools, monitoring, and error handling
 
 ### 🚧 Coming Soon
-- **Frontend Dashboard**: Scaffold-ETH 2 based interface with analytics
 - **Advanced Visualizations**: Interactive charts and data exploration tools
 - **Multi-token Support**: Beyond ERC-20 to all token standards and NFTs
 - **Cross-chain Indexing**: Support for multiple blockchains
@@ -29,56 +33,157 @@ EthIndexer is an intelligent blockchain data indexing platform that allows users
 
 ```
 ethindexer/
-├── backend/                 # Node.js backend with AI integration
+├── backend/                 # NestJS backend with AI integration
 │   ├── src/
-│   │   ├── ai/             # OpenAI integration module
-│   │   ├── indexer/        # Blockchain indexing module
-│   │   ├── api/            # Dynamic API generation
-│   │   ├── database/       # Prisma service and models
-│   │   └── websocket/      # Real-time updates
-│   ├── prisma/             # Prisma schema and migrations
+│   │   ├── ai/             # OpenAI GPT-4 integration module
+│   │   ├── indexer/        # Blockchain indexing service
+│   │   ├── api/            # Dynamic API generation & blocks controller
+│   │   ├── database/       # Prisma service with PostgreSQL
+│   │   ├── websocket/      # Real-time WebSocket updates
+│   │   ├── orchestrator/   # Main orchestration service
+│   │   ├── indexing-orchestrator/ # Job management system
+│   │   ├── chat/           # AI chat interface
+│   │   ├── tokens/         # Token management
+│   │   ├── users/          # User management & authentication
+│   │   └── live-data/      # Real-time data streaming
+│   ├── prisma/             # Database schema & migrations
 │   └── package.json
-├── frontend/               # Scaffold-ETH 2 based frontend (planned)
-└── docs/                  # Documentation
+├── frontend/               # Scaffold-ETH 2 based frontend
+│   ├── packages/nextjs/    # Next.js 13+ application
+│   │   ├── app/           # App router pages
+│   │   │   ├── app/       # Dashboard & user interface
+│   │   │   └── components/ # React components
+│   │   ├── hooks/         # Custom React hooks
+│   │   └── services/      # API services
+│   └── yarn.lock
+└── README.md
 ```
 
 ## 🗄️ Database Schema
 
-EthIndexer uses Prisma with PostgreSQL for robust data management:
+EthIndexer uses Prisma with PostgreSQL for robust data management with comprehensive indexing and user management:
 
 ```prisma
+model User {
+  id        String   @id @default(cuid())
+  address   String   @unique // Wallet address
+  ensName   String?  // ENS name if available
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  // Relations
+  jobs      IndexingJob[]
+  addresses UserAddress[]
+}
+
 model Transfer {
   id          String   @id @default(cuid())
-  blockNumber BigInt
+  blockNumber String   // Universal block number support
   txHash      String
   from        String
   to          String
-  value       BigInt
+  value       String   // Universal value support
   token       Token    @relation(fields: [tokenId], references: [id])
+  tokenId     String
   timestamp   DateTime
+  gasUsed     String?  // Gas usage tracking
+  gasPrice    String?  // Gas price tracking
   indexed     Boolean  @default(true)
+  tier        String   @default("hot") // "hot", "warm", "cold"
   createdAt   DateTime @default(now())
+     
+  @@index([from])
+  @@index([to])
+  @@index([blockNumber])
+  @@index([timestamp])
+  @@index([tier, timestamp])
+}
+
+model Token {
+  id           String     @id @default(cuid())
+  address      String     @unique
+  name         String?
+  symbol       String?
+  decimals     Int?
+  totalSupply  String?    // Universal supply tracking
+  transfers    Transfer[]
+  indexingTier String     @default("on-demand") // "popular", "on-demand", "archive"
+  isPopular    Boolean    @default(false)
+  lastIndexed  DateTime?
+  userRequests Int        @default(0)
+  createdAt    DateTime   @default(now())
   
-  @@index([from, to, blockNumber])
+  @@index([isPopular])
+  @@index([userRequests])
 }
 
 model IndexingJob {
-  id        String   @id @default(cuid())
-  query     String   // Original natural language query
-  config    Json     // Parsed indexing configuration
-  status    String   // active, paused, completed, error
-  addresses String[] // Addresses to index
-  events    String[] // Event types to index
-  createdAt DateTime @default(now())
+  id              String   @id @default(cuid())
+  query           String
+  config          Json
+  status          String   // "active", "paused", "completed", "error"
+  priority        String   @default("normal") // "high", "normal", "low"
+  tier            String   @default("warm") // "hot", "warm", "cold"
+  fromBlock       String?  // Universal block number support
+  toBlock         String?  // Universal block number support
+  addresses       String[]
+  events          String[]
+  progress        Float    @default(0) // 0-100 completion percentage
+  blocksProcessed String   @default("0") // Universal counting
+  estimatedBlocks String?  // Universal estimation
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
+  
+  // User relation
+  userId    String?
+  user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  // Link to API endpoints created by this job
+  apiEndpoints ApiEndpoint[]
+  
+  @@index([status, priority])
+  @@index([tier])
+  @@index([userId])
 }
 
 model ApiEndpoint {
   id          String   @id @default(cuid())
   path        String   @unique
-  query       String   // Original natural language query
-  sqlQuery    String   // Generated SQL
-  parameters  Json     // Expected parameters
+  query       String
+  sqlQuery    String
+  parameters  Json
+  description String?
+  tier        String   @default("warm")
+  cacheTime   Int      @default(300)
+  createdAt   DateTime @default(now())
+  lastUsed    DateTime?
   useCount    Int      @default(0)
+  
+  // Link to the indexing job that created this endpoint
+  jobId       String?
+  job         IndexingJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  
+  @@index([tier])
+  @@index([useCount])
+  @@index([jobId])
+}
+
+model IndexingMetrics {
+  id              String   @id @default(cuid())
+  tokenAddress    String
+  blockRange      String   // "18000000-18001000"
+  tier            String   // "hot", "warm", "cold"
+  transferCount   String   // Universal counting
+  indexingTime    Int      // milliseconds
+  storageSize     String   // Universal storage tracking
+  queryCount      Int      @default(0)
+  lastAccessed    DateTime?
+  createdAt       DateTime @default(now())
+  
+  @@index([tokenAddress])
+  @@index([tier])
+  @@index([queryCount])
 }
 ```
 
@@ -170,45 +275,92 @@ model ApiEndpoint {
 ### API Endpoints
 
 ```bash
-# Get all transfers
-GET /api/transfers
+# Health & System
+GET /health                    # System health check with database stats
+GET /                         # API information and available endpoints
 
-# Get transfers for specific address
-GET /api/transfers?from=0x...
+# Dynamic API Generation
+GET /api/dynamic              # List all available dynamic endpoints
+GET /api/dynamic/:endpoint    # Execute dynamic endpoint with parameters
 
-# Get transfers with pagination
-GET /api/transfers?limit=100&offset=0
+# Orchestration & Job Management
+POST /orchestrator/execute    # Execute natural language query
+GET /orchestrator/job/:jobId  # Get specific job status
+GET /orchestrator/jobs        # List all indexing jobs
+POST /orchestrator/start      # Start indexing job
+POST /orchestrator/pause      # Pause indexing job
+POST /orchestrator/resume     # Resume indexing job
+POST /orchestrator/stop       # Stop indexing job
 
-# AI-powered natural language endpoint
-POST /ai/parse-query
-Content-Type: application/json
-{
-  "query": "Index USDC transfers from block 18000000"
-}
+# Block Data & Analysis
+GET /api/blocks               # Get block data with filtering
+GET /api/blocks/:blockNumber  # Get specific block details
+GET /api/blocks/recent        # Get recent blocks
 
-# Get indexing job status
-GET /api/indexing-jobs
+# Live Data Streaming
+GET /api/live-data            # Real-time blockchain data
+GET /api/live-data/transfers  # Live transfer data
 
-# WebSocket connection for real-time updates
-WS /indexer (namespace)
+# User Management
+GET /api/users                # User information
+POST /api/users/addresses     # Add tracked addresses
+GET /api/users/addresses      # List user addresses
+
+# AI & Chat Interface
+POST /chat/message            # Send chat message to AI
+GET /chat/history             # Get chat history
+
+# Token Management
+GET /api/tokens               # List tokens
+GET /api/tokens/:address      # Get specific token info
+
+# WebSocket Connections
+WS /indexer                   # Real-time indexing updates
+WS /blocks                    # Real-time block updates
+WS /transfers                 # Real-time transfer updates
 ```
 
 ## 🔧 Technology Stack
 
-### Current (Backend)
+### Backend
 - **Framework**: NestJS with TypeScript
 - **Database**: PostgreSQL with Prisma ORM
 - **Blockchain**: Ethers.js with Infura/Alchemy
 - **AI**: OpenAI GPT-4 for natural language processing
 - **Real-time**: WebSockets with Socket.io
-- **API Documentation**: Swagger/OpenAPI
+- **Authentication**: Wallet-based with ENS resolution
+- **Caching**: Redis for performance optimization
+- **Monitoring**: Comprehensive logging and health checks
 
-### Planned (Frontend)
-- **Frontend**: Next.js 13+ with Scaffold-ETH 2
-- **UI**: Tailwind CSS + shadcn/ui components
+### Frontend
+- **Framework**: Next.js 13+ with App Router
+- **Base**: Scaffold-ETH 2 for Web3 integration
+- **UI**: Tailwind CSS with custom components
 - **Web3**: Wagmi + Viem for Ethereum interactions
-- **State**: Zustand + React Query
-- **Charts**: Recharts for data visualization
+- **State**: React hooks with custom state management
+- **Real-time**: WebSocket integration for live updates
+- **Components**: Custom React components with TypeScript
+
+## 🎨 Frontend Features
+
+### Current Implementation
+- **Dashboard**: Complete user interface with wallet connection
+- **Query Builder**: Interactive AI-powered query creation
+- **Job Management**: Real-time monitoring of indexing jobs
+- **API Explorer**: View and test generated API endpoints
+- **Block Explorer**: Comprehensive block data visualization
+- **Live Data**: Real-time blockchain data streaming
+- **User Profile**: Wallet-based authentication and settings
+- **Chat Interface**: AI-powered natural language query builder
+
+### Key Pages
+- `/app` - Main dashboard with system overview
+- `/app/query` - AI-powered query builder
+- `/app/apis` - Generated API endpoints management
+- `/app/jobs` - Indexing jobs monitoring
+- `/app/blocks` - Block explorer and analysis
+- `/app/data` - Live blockchain data streaming
+- `/app/profile` - User settings and wallet management
 
 ## 🌐 Live Demo
 
@@ -224,29 +376,15 @@ WS /indexer (namespace)
 
 ## 🗺️ Roadmap
 
-### Phase 1: Foundation Enhancement (Weeks 1-2)
-- [ ] Enhanced AI query processing capabilities
-- [ ] Dynamic API endpoint generation
-- [ ] Improved error handling and logging
-- [ ] Advanced indexing configuration options
-
-### Phase 2: Frontend & APIs (Weeks 3-4)
-- [ ] Scaffold-ETH 2 frontend implementation
-- [ ] Dynamic API endpoint generation
-- [ ] Interactive chat interface
-- [ ] Basic analytics dashboard
-
-### Phase 3: Advanced Features (Weeks 5-6)
-- [ ] Real-time WebSocket streaming
-- [ ] Advanced data visualization
-- [ ] Multi-token indexing support
-- [ ] Export functionality (CSV, JSON)
-
-### Phase 4: Developer Tools (Weeks 7-8)
-- [ ] API playground and documentation
-- [ ] Code generation tools
-- [ ] Webhook notifications
-- [ ] Production optimization
+### Upcoming Features
+- **Advanced Visualizations**: Interactive charts and data exploration tools
+- **Multi-token Support**: Beyond ERC-20 to all token standards and NFTs
+- **Cross-chain Indexing**: Support for multiple blockchains
+- **API Playground**: Interactive documentation and testing interface
+- **Webhook Notifications**: Real-time alerts for specific events
+- **Export Tools**: CSV, JSON, and direct database exports
+- **Advanced Analytics**: Machine learning insights and pattern recognition
+- **Mobile App**: React Native application for mobile access
 
 ## 🤝 Contributing
 
