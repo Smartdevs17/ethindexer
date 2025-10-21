@@ -33,28 +33,28 @@ EthIndexer is an intelligent blockchain data indexing platform that allows users
 
 ```
 ethindexer/
-├── backend/                 # NestJS backend with AI integration
+├── backend/
 │   ├── src/
-│   │   ├── ai/             # OpenAI GPT-4 integration module
-│   │   ├── indexer/        # Blockchain indexing service
-│   │   ├── api/            # Dynamic API generation & blocks controller
-│   │   ├── database/       # Prisma service with PostgreSQL
-│   │   ├── websocket/      # Real-time WebSocket updates
-│   │   ├── orchestrator/   # Main orchestration service
-│   │   ├── indexing-orchestrator/ # Job management system
-│   │   ├── chat/           # AI chat interface
-│   │   ├── tokens/         # Token management
-│   │   ├── users/          # User management & authentication
-│   │   └── live-data/      # Real-time data streaming
-│   ├── prisma/             # Database schema & migrations
+│   │   ├── ai/
+│   │   ├── indexer/
+│   │   ├── api/
+│   │   ├── database/
+│   │   ├── websocket/
+│   │   ├── orchestrator/
+│   │   ├── indexing-orchestrator/
+│   │   ├── chat/
+│   │   ├── tokens/
+│   │   ├── users/
+│   │   └── live-data/
+│   ├── prisma/
 │   └── package.json
-├── frontend/               # Scaffold-ETH 2 based frontend
-│   ├── packages/nextjs/    # Next.js 13+ application
-│   │   ├── app/           # App router pages
-│   │   │   ├── app/       # Dashboard & user interface
-│   │   │   └── components/ # React components
-│   │   ├── hooks/         # Custom React hooks
-│   │   └── services/      # API services
+├── frontend/
+│   ├── packages/nextjs/
+│   │   ├── app/
+│   │   │   ├── app/
+│   │   │   └── components/
+│   │   ├── hooks/
+│   │   └── services/
 │   └── yarn.lock
 └── README.md
 ```
@@ -66,30 +66,29 @@ EthIndexer uses Prisma with PostgreSQL for robust data management with comprehen
 ```prisma
 model User {
   id        String   @id @default(cuid())
-  address   String   @unique // Wallet address
-  ensName   String?  // ENS name if available
+  address   String   @unique
+  ensName   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  // Relations
   jobs      IndexingJob[]
   addresses UserAddress[]
 }
 
 model Transfer {
   id          String   @id @default(cuid())
-  blockNumber String   // Universal block number support
+  blockNumber String
   txHash      String
   from        String
   to          String
-  value       String   // Universal value support
+  value       String
   token       Token    @relation(fields: [tokenId], references: [id])
   tokenId     String
   timestamp   DateTime
-  gasUsed     String?  // Gas usage tracking
-  gasPrice    String?  // Gas price tracking
+  gasUsed     String?
+  gasPrice    String?
   indexed     Boolean  @default(true)
-  tier        String   @default("hot") // "hot", "warm", "cold"
+  tier        String   @default("hot")
   createdAt   DateTime @default(now())
      
   @@index([from])
@@ -105,9 +104,9 @@ model Token {
   name         String?
   symbol       String?
   decimals     Int?
-  totalSupply  String?    // Universal supply tracking
+  totalSupply  String?
   transfers    Transfer[]
-  indexingTier String     @default("on-demand") // "popular", "on-demand", "archive"
+  indexingTier String     @default("on-demand")
   isPopular    Boolean    @default(false)
   lastIndexed  DateTime?
   userRequests Int        @default(0)
@@ -121,25 +120,23 @@ model IndexingJob {
   id              String   @id @default(cuid())
   query           String
   config          Json
-  status          String   // "active", "paused", "completed", "error"
-  priority        String   @default("normal") // "high", "normal", "low"
-  tier            String   @default("warm") // "hot", "warm", "cold"
-  fromBlock       String?  // Universal block number support
-  toBlock         String?  // Universal block number support
+  status          String
+  priority        String   @default("normal")
+  tier            String   @default("warm")
+  fromBlock       String?
+  toBlock         String?
   addresses       String[]
   events          String[]
-  progress        Float    @default(0) // 0-100 completion percentage
-  blocksProcessed String   @default("0") // Universal counting
-  estimatedBlocks String?  // Universal estimation
+  progress        Float    @default(0)
+  blocksProcessed String   @default("0")
+  estimatedBlocks String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   completedAt     DateTime?
   
-  // User relation
   userId    String?
   user      User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
   
-  // Link to API endpoints created by this job
   apiEndpoints ApiEndpoint[]
   
   @@index([status, priority])
@@ -160,7 +157,6 @@ model ApiEndpoint {
   lastUsed    DateTime?
   useCount    Int      @default(0)
   
-  // Link to the indexing job that created this endpoint
   jobId       String?
   job         IndexingJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
   
@@ -172,11 +168,11 @@ model ApiEndpoint {
 model IndexingMetrics {
   id              String   @id @default(cuid())
   tokenAddress    String
-  blockRange      String   // "18000000-18001000"
-  tier            String   // "hot", "warm", "cold"
-  transferCount   String   // Universal counting
+  blockRange      String
+  tier            String
+  transferCount   String
   indexingTime    Int      // milliseconds
-  storageSize     String   // Universal storage tracking
+  storageSize     String
   queryCount      Int      @default(0)
   lastAccessed    DateTime?
   createdAt       DateTime @default(now())
@@ -275,49 +271,40 @@ model IndexingMetrics {
 ### API Endpoints
 
 ```bash
-# Health & System
-GET /health                    # System health check with database stats
-GET /                         # API information and available endpoints
+GET /health
+GET /
 
-# Dynamic API Generation
-GET /api/dynamic              # List all available dynamic endpoints
-GET /api/dynamic/:endpoint    # Execute dynamic endpoint with parameters
+GET /api/dynamic
+GET /api/dynamic/:endpoint
 
-# Orchestration & Job Management
-POST /orchestrator/execute    # Execute natural language query
-GET /orchestrator/job/:jobId  # Get specific job status
-GET /orchestrator/jobs        # List all indexing jobs
-POST /orchestrator/start      # Start indexing job
-POST /orchestrator/pause      # Pause indexing job
-POST /orchestrator/resume     # Resume indexing job
-POST /orchestrator/stop       # Stop indexing job
+POST /orchestrator/execute
+GET /orchestrator/job/:jobId
+GET /orchestrator/jobs
+POST /orchestrator/start
+POST /orchestrator/pause
+POST /orchestrator/resume
+POST /orchestrator/stop
 
-# Block Data & Analysis
-GET /api/blocks               # Get block data with filtering
-GET /api/blocks/:blockNumber  # Get specific block details
-GET /api/blocks/recent        # Get recent blocks
+GET /api/blocks
+GET /api/blocks/:blockNumber
+GET /api/blocks/recent
 
-# Live Data Streaming
-GET /api/live-data            # Real-time blockchain data
-GET /api/live-data/transfers  # Live transfer data
+GET /api/live-data
+GET /api/live-data/transfers
 
-# User Management
-GET /api/users                # User information
-POST /api/users/addresses     # Add tracked addresses
-GET /api/users/addresses      # List user addresses
+GET /api/users
+POST /api/users/addresses
+GET /api/users/addresses
 
-# AI & Chat Interface
-POST /chat/message            # Send chat message to AI
-GET /chat/history             # Get chat history
+POST /chat/message
+GET /chat/history
 
-# Token Management
-GET /api/tokens               # List tokens
-GET /api/tokens/:address      # Get specific token info
+GET /api/tokens
+GET /api/tokens/:address
 
-# WebSocket Connections
-WS /indexer                   # Real-time indexing updates
-WS /blocks                    # Real-time block updates
-WS /transfers                 # Real-time transfer updates
+WS /indexer
+WS /blocks
+WS /transfers
 ```
 
 ## 🔧 Technology Stack
