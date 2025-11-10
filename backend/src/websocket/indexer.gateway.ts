@@ -52,7 +52,12 @@ export interface SystemStatusEvent {
 @WebSocketGateway({
   namespace: '/indexer',
   cors: {
-    origin: [process.env.FRONTEND_URL || 'http://localhost:3000', 'http://127.0.0.1:5500'],
+    origin: [
+      'https://ethindexer.vercel.app',
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      'http://127.0.0.1:5500',
+      'http://localhost:3001',
+    ],
     credentials: true,
   },
 })
