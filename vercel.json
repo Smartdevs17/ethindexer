@@ -1,3 +1,6 @@
 {
-    "installCommand": "yarn install"
-  }
+  "buildCommand": "cd frontend && yarn install && yarn workspace @se-2/nextjs build",
+  "outputDirectory": "frontend/packages/nextjs/.next",
+  "installCommand": "cd frontend && yarn install",
+  "framework": "nextjs"
+}
