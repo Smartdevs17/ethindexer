@@ -21,7 +21,8 @@
     "vercel:yolo": "yarn workspace @se-2/nextjs vercel:yolo",
     "vercel:login": "yarn workspace @se-2/nextjs vercel:login",
     "ipfs": "yarn workspace @se-2/nextjs ipfs",
-    "build": "yarn workspace @se-2/nextjs build"
+    "build": "yarn workspace @se-2/nextjs build",
+    "vercel-build": "cd packages/nextjs && yarn install && yarn build"
   },
   "packageManager": "yarn@3.2.3",
   "devDependencies": {
