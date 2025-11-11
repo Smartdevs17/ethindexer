@@ -1,3 +1,0 @@
-{
-  "installCommand": "cd ../.. && yarn install"
-}

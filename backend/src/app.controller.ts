@@ -9,7 +9,6 @@ export class AppController {
   async getHealth() {
     const dbHealth = await this.prisma.healthCheck();
     const dbStats = await this.prisma.getStats();
-    
     return {
       status: 'ok',
       timestamp: new Date(),
@@ -28,6 +27,10 @@ export class AppController {
         api: '/api',
         indexer: '/indexer',
         ai: '/ai',
+        users: '/users',
+        websocket: '/indexer (namespace)',
+        socketio: '/socket.io/ (base path)',
+        root: '/',
       }
     };
   }

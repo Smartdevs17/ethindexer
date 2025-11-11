@@ -15,7 +15,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
       console.log('✅ Database connected successfully');
     } catch (error) {
       console.error('❌ Database connection failed:', error);
-      throw error;
+      // Don't throw error - allow app to start even if DB is unavailable
+      // This is important for Vercel deployments where DB might not be configured
+      console.warn('⚠️  Continuing without database connection. Some features may be unavailable.');
     }
   }
 
