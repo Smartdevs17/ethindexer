@@ -6,7 +6,7 @@ yarn-error.log*
 pnpm-debug.log*
 package-lock.json
 .pnpm-lock.yaml
-yarn.lock
+# yarn.lock - Allow frontend/yarn.lock for Yarn 3 (see frontend section below)
 .pnpm-debug.log
 yarn-error.log
 
@@ -75,7 +75,7 @@ frontend/public/sw.js
 frontend/public/workbox-*.js
 frontend/public/worker-*.js
 frontend/public/fallback-*.js
-frontend/yarn.lock
+# frontend/yarn.lock - Keep this committed for Yarn 3
 
 # Scaffold-ETH specific
 frontend/packages/nextjs/.next/

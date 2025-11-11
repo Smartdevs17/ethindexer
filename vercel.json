@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd frontend && yarn install && yarn workspace @se-2/nextjs build",
+  "buildCommand": "cd frontend && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install && yarn workspace @se-2/nextjs build",
   "outputDirectory": "frontend/packages/nextjs/.next",
-  "installCommand": "cd frontend && yarn install",
+  "installCommand": "cd frontend && YARN_ENABLE_IMMUTABLE_INSTALLS=false yarn install",
   "framework": "nextjs"
 }
