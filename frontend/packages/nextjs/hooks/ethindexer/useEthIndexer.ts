@@ -388,36 +388,46 @@ export const useEthIndexer = () => {
           const rawTimestamp = job.timestamp || job.createdAt || job.updatedAt;
           const timestamp = safeTimestampToDate(rawTimestamp, new Date());
           
-          // Generate API URL based on job message
+          // Generate API URL based on job message - always include job_id
           let apiUrl: string | undefined;
           let apiDescription: string | undefined;
           let apiStatus: 'preparing' | 'ready' = 'preparing';
           
-          if (job.status === 'completed' && job.message) {
+          const jobId = job.jobId || job.id;
+          
+          if (job.status === 'completed' && job.message && jobId) {
             const message = job.message.toLowerCase();
+            const baseUrl = '/api/dynamic/transfers';
+            const params = new URLSearchParams();
+            
+            // Always include job_id
+            params.append('job_id', jobId);
+            
             // All endpoints now use the dynamic API with token filtering
             if (message.includes('usdc')) {
-              apiUrl = '/api/dynamic/transfers?token=0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48';
+              params.append('token', '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48');
               apiDescription = 'USDC transfer data';
               apiStatus = 'ready';
             } else if (message.includes('weth')) {
-              apiUrl = '/api/dynamic/transfers?token=0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2';
+              params.append('token', '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2');
               apiDescription = 'WETH transfer data';
               apiStatus = 'ready';
             } else if (message.includes('dai')) {
-              apiUrl = '/api/dynamic/transfers?token=0x6b175474e89094c44da98b954eedeac495271d0f';
+              params.append('token', '0x6b175474e89094c44da98b954eedeac495271d0f');
               apiDescription = 'DAI transfer data';
               apiStatus = 'ready';
             } else if (message.includes('usdt')) {
-              apiUrl = '/api/dynamic/transfers?token=0xdac17f958d2ee523a2206206994597c13d831ec7';
+              params.append('token', '0xdac17f958d2ee523a2206206994597c13d831ec7');
               apiDescription = 'USDT transfer data';
               apiStatus = 'ready';
             } else {
-              // Generic API endpoint - use dynamic API
-              apiUrl = '/api/dynamic/transfers';
+              // Generic API endpoint - use dynamic API with just job_id
               apiDescription = 'General transfer data';
               apiStatus = 'ready';
             }
+            
+            // Build final URL with job_id and optional token parameter
+            apiUrl = `${baseUrl}?${params.toString()}`;
           }
           
           return {

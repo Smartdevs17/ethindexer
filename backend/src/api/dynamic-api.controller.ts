@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Query, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { Controller, Get, Param, Query, NotFoundException, OnModuleInit, Req } from '@nestjs/common';
+import { Request } from 'express';
 import { DynamicApiService } from './dynamic-api.service';
 import { Logger } from '@nestjs/common';
 
-@Controller('api/dynamic') // Changed from 'api' to 'api/dynamic' to avoid conflicts
+@Controller('api/dynamic')
 export class DynamicApiController implements OnModuleInit {
   private readonly logger = new Logger(DynamicApiController.name);
   
@@ -26,7 +27,7 @@ export class DynamicApiController implements OnModuleInit {
   }
 
   /**
-   * 📋 List all available dynamic endpoints
+   * List all available dynamic endpoints
    * GET /api/dynamic
    */
   @Get()
@@ -40,14 +41,14 @@ export class DynamicApiController implements OnModuleInit {
         count: endpoints.length,
         message: 'Available dynamic API endpoints',
         usage: {
-          example: 'GET /api/dynamic/usdc-transfers?limit=10&fromBlock=18000000',
-          parameters: 'All endpoints support: limit, offset, sortBy, sortOrder, address, fromBlock, toBlock, minValue, maxValue'
+          example: 'GET /api/dynamic/transfers?job_id=xxx&limit=10&fromBlock=18000000',
+          parameters: 'All endpoints support: job_id (required for job-specific queries), limit, offset, sortBy, sortOrder, address, fromBlock, toBlock, minValue, maxValue, token'
         },
         timestamp: new Date(),
       };
       
     } catch (error) {
-      this.logger.error('❌ Failed to list endpoints:', error);
+      this.logger.error('Failed to list endpoints:', error);
       
       return {
         success: false,
@@ -58,28 +59,75 @@ export class DynamicApiController implements OnModuleInit {
   }
 
   /**
-   * 🔍 Execute dynamic API endpoint
-   * GET /api/dynamic/:endpoint
+   * Execute transfers endpoint with job_id query parameter
+   * GET /api/dynamic/transfers?job_id=xxx
    */
-  @Get(':endpoint')
-  async executeDynamicEndpoint(
-    @Param('endpoint') endpoint: string,
+  @Get('transfers')
+  async executeTransfersEndpoint(
     @Query() queryParams: Record<string, any>
   ) {
-    // Check if this is a static endpoint that should not be handled here
-    if (this.staticEndpoints.includes(endpoint)) {
-      this.logger.log(`🚫 Skipping static endpoint: ${endpoint} - should be handled by specific controller`);
+    const path = '/api/dynamic/transfers';
+    this.logger.log(`Executing transfers endpoint: ${path}`);
+    this.logger.debug(`Query parameters:`, queryParams);
+
+    try {
+      const result = await this.dynamicApiService.executeDynamicApi(path, queryParams);
+      
+      return {
+        ...result,
+        timestamp: new Date(),
+      };
+      
+    } catch (error) {
+      this.logger.error(`❌ Failed to execute ${path}:`, error);
+      
+      if (error.message.includes('not found')) {
+        throw new NotFoundException({
+          success: false,
+          error: `Endpoint ${path} not found`,
+          message: 'This endpoint has not been generated yet. Create it by running an indexing query.',
+          availableEndpoints: '/api/dynamic',
+          timestamp: new Date(),
+        });
+      }
+      
+      return {
+        success: false,
+        error: error.message,
+        endpoint: path,
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Execute dynamic API endpoint (fallback for other endpoints)
+   * GET /api/dynamic/:endpoint
+   */
+  @Get('*')
+  async executeDynamicEndpoint(
+    @Req() req: Request,
+    @Query() queryParams: Record<string, any>
+  ) {
+    const fullPath = req.originalUrl.split('?')[0];
+    const path = fullPath;
+    
+    const pathAfterBase = fullPath.replace(/^\/api\/dynamic\/?/, '');
+    const pathSegments = pathAfterBase.split('/').filter(Boolean);
+    const firstSegment = pathSegments[0];
+    
+    if (firstSegment && this.staticEndpoints.includes(firstSegment)) {
+      this.logger.log(`Skipping static endpoint: ${firstSegment} - should be handled by specific controller`);
       throw new NotFoundException({
         success: false,
-        error: `Endpoint /api/dynamic/${endpoint} is a static endpoint`,
+        error: `Endpoint ${path} is a static endpoint`,
         message: 'This endpoint is handled by a specific controller, not the dynamic API system.',
         availableEndpoints: '/api/dynamic',
         timestamp: new Date(),
       });
     }
 
-    const path = `/api/dynamic/${endpoint}`; // Updated path to match new route
-    this.logger.log(`🔍 Executing dynamic endpoint: ${path}`);
+    this.logger.log(`Executing dynamic endpoint: ${path}`);
     this.logger.debug(`Query parameters:`, queryParams);
 
     try {

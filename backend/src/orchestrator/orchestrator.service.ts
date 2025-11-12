@@ -139,13 +139,13 @@ export class OrchestratorService {
         this.logger.error(`❌ Background indexing failed for job ${job.id}:`, error);
       });
 
-      // Return with API URL and description
+      // Return with API URL and description (include job_id)
       return {
         result: {
           jobId: job.id,
           message: 'Indexing job created successfully',
           config: config,
-          apiUrl: await this.generateApiUrl(config, query),
+          apiUrl: await this.generateApiUrl(config, query, job.id),
           description: this.generateDescription(config, query)
         }
       };
@@ -246,38 +246,32 @@ export class OrchestratorService {
 
   /**
    * Generate API URL based on indexing config
+   * Now uses /api/dynamic/transfers?job_id=xxx format
    */
-  private async generateApiUrl(config: any, query: string): Promise<string> {
-    let endpointName = 'transfers';
-    if (config.tokenSymbol) {
-      endpointName = `${config.tokenSymbol.toLowerCase()}-transfers`;
-    } else if (config.addresses && config.addresses.length === 1) {
-      const address = config.addresses[0];
-      // Try to get token symbol from database
-      const token = await this.prisma.token.findUnique({
-        where: { address: address.toLowerCase() }
-      });
-      if (token) {
-        endpointName = `${token.symbol.toLowerCase()}-transfers`;
-      }
-    }
-    // All endpoints now use the dynamic API with appropriate query parameters
-    let baseUrl = '/api/dynamic/transfers';
+  private async generateApiUrl(config: any, query: string, jobId?: string): Promise<string> {
+    // All endpoints now use /api/dynamic/transfers with job_id parameter
+    const baseUrl = '/api/dynamic/transfers';
+    const params = new URLSearchParams();
     
+    // Add job_id if provided
+    if (jobId) {
+      params.append('job_id', jobId);
+    }
+    
+    // Add token parameter if available
     if (config.tokenSymbol) {
-      // For specific token symbols, add token parameter
       const tokenAddress = this.getTokenAddressBySymbol(config.tokenSymbol);
       if (tokenAddress) {
-        return `${baseUrl}?token=${tokenAddress}`;
+        params.append('token', tokenAddress);
       }
     } else if (config.addresses && config.addresses.length > 0) {
-      // For specific addresses, add token parameter
       const address = config.addresses[0];
-      return `${baseUrl}?token=${address}`;
+      params.append('token', address);
     }
     
-    // Default: return the base dynamic transfers endpoint
-    return baseUrl;
+    // Build final URL
+    const queryString = params.toString();
+    return queryString ? `${baseUrl}?${queryString}` : baseUrl;
   }
 
   /**
@@ -324,8 +318,8 @@ export class OrchestratorService {
 
       const config = job.config as any;
 
-      // Generate API URL immediately when job starts
-      const apiUrl = await this.generateApiUrl(config, job.query);
+      // Generate API URL immediately when job starts (include job_id)
+      const apiUrl = await this.generateApiUrl(config, job.query, jobId);
       const description = this.generateDescription(config, job.query);
       
       // Emit API URL immediately to frontend

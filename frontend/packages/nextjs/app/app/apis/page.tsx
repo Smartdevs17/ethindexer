@@ -21,7 +21,6 @@ export default function MyAPIsPage() {
   // Each job gets its own endpoint: /api/dynamic/usdc-transfers/job123, /api/dynamic/usdc-transfers/job456
   // No more URL deduplication needed - backend handles uniqueness
   // Deduplicate by jobId to prevent React key conflicts
-  console.log(`🔄 Processing ${jobs.length} jobs from useEthIndexer hook`);
   const uniqueJobs = jobs.filter((job, index, self) => 
     index === self.findIndex(j => j.jobId === job.jobId)
   );
@@ -29,7 +28,7 @@ export default function MyAPIsPage() {
   // Create APIs from jobs with intelligent URL generation and deduplication
   const allUserAPIs = uniqueJobs
     .filter(job => {
-      // 🔧 FIXED: Only show jobs that are COMPLETED and have API endpoints
+      // Only show jobs that are COMPLETED and have API endpoints
       const hasMessage = job.message && job.message.length > 0;
       const isCompleted = job.status === 'completed';
       const hasApiEndpoint = job.apiUrl && job.apiUrl.length > 0;
@@ -38,23 +37,30 @@ export default function MyAPIsPage() {
       return hasMessage && isCompleted && hasApiEndpoint;
     })
     .map(job => {
-      // 🔧 DEBUG: Log job structure to understand the data
-      console.log('🔍 Processing job:', {
-        jobId: job.jobId,
-        status: job.status,
-        message: job.message,
-        apiUrl: job.apiUrl,
-        generatedId: generateJobIdFromData(job)
-      });
       
-      // 🔧 UPDATED: Use backend's unique API URLs when available
+      // Use backend's unique API URLs when available, ensure job_id is included
       let apiUrl = job.apiUrl;
+      const jobId = job.jobId || generateJobIdFromData(job);
       
-      // If no apiUrl from backend, skip this job (shouldn't happen with our filter)
+      // If no apiUrl from backend, generate one with job_id
       if (!apiUrl || !job.apiUrl) {
-        const jobId = job.jobId || generateJobIdFromData(job);
-        console.warn(`⚠️ Job ${jobId} has no API endpoint despite being completed`);
-        return null;
+        // Generate URL with job_id
+        apiUrl = `/api/dynamic/transfers?job_id=${jobId}`;
+      } else {
+        // Ensure job_id is in the URL if it's not already there
+        try {
+          const url = new URL(apiUrl.startsWith('http') ? apiUrl : `http://localhost:3001${apiUrl}`);
+          if (!url.searchParams.has('job_id')) {
+            url.searchParams.set('job_id', jobId);
+            apiUrl = url.pathname + url.search;
+          }
+        } catch (e) {
+          // If URL parsing fails, construct it manually
+          if (!apiUrl.includes('job_id=')) {
+            const separator = apiUrl.includes('?') ? '&' : '?';
+            apiUrl = `${apiUrl}${separator}job_id=${jobId}`;
+          }
+        }
       }
       
       return {
@@ -70,7 +76,6 @@ export default function MyAPIsPage() {
       };
     })
     .filter(Boolean); // Remove any null entries
-    // 🔧 REMOVED: URL deduplication - backend now provides unique endpoints per job
 
   // Pagination logic
   const totalAPIs = allUserAPIs.length;
@@ -85,12 +90,11 @@ export default function MyAPIsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // FIXED: This useEffect should only run once when the component mounts, not on every render
+  // This useEffect should only run once when the component mounts, not on every render
   // The previous version was causing infinite loops by including jobs.length in dependencies
   useEffect(() => {
     // Only fetch jobs once when the component mounts and user is authenticated
     if (isConnected && isAuthenticated && jobs.length === 0) {
-      console.log('🔄 Initial jobs fetch...');
       fetchJobs(50, 0); // Start from offset 0, don't append
     }
   }, [isConnected, isAuthenticated, fetchJobs]); // Remove jobs.length from dependencies to prevent infinite loop
@@ -98,10 +102,8 @@ export default function MyAPIsPage() {
   // Helper functions to create user-friendly names
   function generateAPITitle(job: any): string {
     const query = job.message || '';
-    // 🔧 FIXED: Generate a unique job ID from available data since backend doesn't send jobId
     const jobId = job.jobId || generateJobIdFromData(job);
     
-    // 🔧 UPDATED: Generate titles that work with unique endpoints
     if (query.toLowerCase().includes('usdc')) return `USDC Transfers API (Job ${jobId})`;
     if (query.toLowerCase().includes('weth')) return `WETH Transfers API (Job ${jobId})`;
     if (query.toLowerCase().includes('usdt')) return `USDT Transfers API (Job ${jobId})`;
@@ -114,7 +116,7 @@ export default function MyAPIsPage() {
     return `Blockchain Data API (Job ${jobId})`;
   }
 
-  // 🔧 NEW: Generate a unique job ID from available job data
+  // Generate a unique job ID from available job data
   function generateJobIdFromData(job: any): string {
     // Try to create a unique ID from timestamp and message hash
     if (job.timestamp) {
@@ -129,11 +131,9 @@ export default function MyAPIsPage() {
 
   function generateAPIDescription(job: any): string {
     const query = job.message || '';
-    // 🔧 FIXED: Generate a unique job ID from available data since backend doesn't send jobId
     const jobId = job.jobId || generateJobIdFromData(job);
     const status = job.status || 'Unknown';
     
-    // 🔧 UPDATED: More informative descriptions for unique endpoints
     return `Job ${jobId} - ${status}: "${query.slice(0, 80)}${query.length > 80 ? '...' : ''}"`;
   }
 
@@ -315,7 +315,7 @@ export default function MyAPIsPage() {
       
       <div className="grid gap-6">
         {userAPIs.map((api) => {
-          // 🔧 Type guard to ensure api is not null
+          // Type guard to ensure api is not null
           if (!api) return null;
           
           return (
@@ -471,8 +471,6 @@ export default function MyAPIsPage() {
                 if (isLoadingMore) return; // Prevent multiple simultaneous requests
                 setIsLoadingMore(true);
                 try {
-                  console.log('🔄 Manually loading more jobs from backend...');
-                  // Use a fixed offset to prevent infinite loops
                   const nextOffset = Math.max(jobs.length, 0);
                   await fetchJobs(50, nextOffset);
                 } finally {

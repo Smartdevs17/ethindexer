@@ -38,10 +38,10 @@ export class DynamicApiService {
 ) {}
 
   /**
-   * 🔥 Main method: Generate API endpoint from completed indexing job
+   * Generate API endpoint from completed indexing job
    */
   async generateApiFromJob(jobId: string): Promise<ApiEndpointConfig | null> {
-    this.logger.log(`🔧 Generating API endpoint for job ${jobId}`);
+    this.logger.log(`Generating API endpoint for job ${jobId}`);
 
     try {
       // Get completed job
@@ -50,50 +50,35 @@ export class DynamicApiService {
       });
 
       if (!job || job.status !== 'completed') {
-        this.logger.warn(`❌ Job ${jobId} not found or not completed`);
+        this.logger.warn(`Job ${jobId} not found or not completed`);
         return null;
       }
 
       const config = job.config as unknown as IndexingConfig;
-
-      // Generate endpoint configuration
       const endpointConfig = await this.createEndpointConfig(config, job);
       
-        // Store in database
       await this.storeApiEndpoint(endpointConfig, config, jobId);
-      // Also create API endpoint and emit websocket event with jobId
       await this.createApiEndpoint(jobId, endpointConfig.path, config.originalQuery, endpointConfig.sqlQuery);
-  this.logger.log(`✅ Generated API endpoint: ${endpointConfig.path}`);
+      this.logger.log(`Generated API endpoint: ${endpointConfig.path}`);
   return endpointConfig;
 
     } catch (error) {
-      this.logger.error(`❌ Failed to generate API for job ${jobId}:`, error);
+      this.logger.error(`Failed to generate API for job ${jobId}:`, error);
       return null;
     }
   }
 
   /**
-   * 🎯 Create endpoint configuration from indexing config
+   * Create endpoint configuration from indexing config
    */
   private async createEndpointConfig(
     config: IndexingConfig, 
     job: any
   ): Promise<ApiEndpointConfig> {
-    
-    // 🔧 FIXED: Generate unique API endpoint path for each job
-    // This ensures each job gets its own API endpoint, even if they have similar queries
     const uniquePath = this.generateUniqueApiPath(config, job);
-    
-    // Generate description
     const description = this.generateDescription(config);
-    
-    // Generate parameters
     const parameters = this.generateParameters(config);
-    
-    // Generate SQL query
     const sqlQuery = this.generateSqlQuery(config);
-    
-    // Determine cache time based on data type
     const cacheTime = this.determineCacheTime(config);
 
     return {
@@ -108,24 +93,18 @@ export class DynamicApiService {
   }
 
   /**
-   * 🔧 NEW: Generate unique API endpoint path for each job
-   * This prevents conflicts when multiple jobs have similar queries
+   * Generate API endpoint path - use unique path per job to avoid conflicts
+   * Since path must be unique in database, we use a unique path per job
+   * But the API is accessed via /api/dynamic/transfers?job_id=xxx
    */
   private generateUniqueApiPath(config: IndexingConfig, job: any): string {
-    const jobId = job.id;
-    const baseEndpoint = config.apiEndpoint;
-    
-    // Create unique path: /api/dynamic/{base-endpoint}/{job-id}
-    // Example: /api/dynamic/usdc-transfers/job123, /api/dynamic/weth-transfers/job456
-    const uniquePath = `/api/dynamic/${baseEndpoint}/${jobId}`;
-    
-    this.logger.log(`🔧 Generated unique API path: ${uniquePath} for job ${jobId}`);
-    
+    const uniquePath = `/api/dynamic/transfers/job-${job.id}`;
+    this.logger.log(`Generated unique API path for storage: ${uniquePath} for job ${job.id}`);
     return uniquePath;
   }
 
   /**
-   * 📝 Generate human-readable description
+   * Generate human-readable description
    */
   private generateDescription(config: IndexingConfig): string {
     const { addresses, events, fromBlock, toBlock, originalQuery } = config;
@@ -150,7 +129,7 @@ export class DynamicApiService {
   }
 
   /**
-   * 🔧 Generate API parameters
+   * Generate API parameters
    */
   private generateParameters(config: IndexingConfig): Record<string, any> {
     const params: Record<string, any> = {
@@ -219,7 +198,42 @@ export class DynamicApiService {
   }
 
   /**
-   * 🗄️ Generate SQL query for endpoint
+   * Filter addresses based on the original query to match what was actually requested
+   * If query mentions specific tokens, only include those addresses
+   */
+  private filterAddressesByQuery(originalQuery: string, addresses: string[]): string[] {
+    if (!originalQuery || addresses.length === 0) {
+      return addresses;
+    }
+    
+    const queryLower = originalQuery.toLowerCase();
+    const tokenMap: { [key: string]: string } = {
+      'usdc': '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      'usdt': '0xdac17f958d2ee523a2206206994597c13d831ec7',
+      'weth': '0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2',
+      'dai': '0x6b175474e89094c44da98b954eedeac495271d0f',
+    };
+    
+    const mentionedTokens: string[] = [];
+    for (const [tokenName, address] of Object.entries(tokenMap)) {
+      if (queryLower.includes(tokenName)) {
+        mentionedTokens.push(address.toLowerCase());
+      }
+    }
+    
+    if (mentionedTokens.length > 0) {
+      const filtered = addresses.filter(addr => 
+        mentionedTokens.includes(addr.toLowerCase())
+      );
+      this.logger.log(`Query mentions tokens: ${mentionedTokens.join(', ')}, filtered addresses: ${filtered.length}`);
+      return filtered.length > 0 ? filtered : addresses;
+    }
+    
+    return addresses;
+  }
+
+  /**
+   * Generate SQL query for endpoint
    */
   private generateSqlQuery(config: IndexingConfig): string {
     let baseQuery = `
@@ -241,19 +255,23 @@ export class DynamicApiService {
       WHERE 1=1
     `;
 
-    // Add address filters
-    if (config.addresses.length > 0) {
-      const addressList = config.addresses.map(addr => `'${addr.toLowerCase()}'`).join(',');
-      baseQuery += ` AND tk.address IN (${addressList})`;
+    if (config.addresses && config.addresses.length > 0) {
+      const normalizedAddresses = config.addresses.map(addr => addr.toLowerCase());
+      const addressList = normalizedAddresses.map(addr => `'${addr}'`).join(',');
+      baseQuery += ` AND LOWER(tk.address) IN (${addressList})`;
+      this.logger.log(`SQL Query will filter by token addresses: ${normalizedAddresses.join(', ')}`);
+    } else {
+      this.logger.warn(`No addresses in config - SQL query will return all transfers`);
     }
 
-    // Add block filters (always quote blockNumber)
     if (config.fromBlock) {
       baseQuery += ` AND CAST(t."blockNumber" AS INTEGER) >= ${config.fromBlock}`;
+      this.logger.log(`SQL Query will filter from block: ${config.fromBlock}`);
     }
     
     if (config.toBlock) {
       baseQuery += ` AND CAST(t."blockNumber" AS INTEGER) <= ${config.toBlock}`;
+      this.logger.log(`SQL Query will filter to block: ${config.toBlock}`);
     }
 
     // Add dynamic filters placeholder
@@ -267,25 +285,22 @@ export class DynamicApiService {
   }
 
   /**
-   * ⏱️ Determine cache time based on data characteristics
+   * Determine cache time based on data characteristics
    */
   private determineCacheTime(config: IndexingConfig): number {
-    // Hot data (recent blocks) - cache for 30 seconds
     if (!config.toBlock || (config.toBlock && config.toBlock > Date.now() / 1000 - 3600)) {
       return 30;
     }
     
-    // Warm data (few hours old) - cache for 5 minutes  
     if (config.toBlock && config.toBlock > Date.now() / 1000 - 86400) {
       return 300;
     }
     
-    // Cold data (historical) - cache for 1 hour
     return 3600;
   }
 
   /**
-   * 💾 Store API endpoint in database
+   * Store API endpoint in database
    */
   private async storeApiEndpoint(
     endpointConfig: ApiEndpointConfig,
@@ -301,7 +316,7 @@ export class DynamicApiService {
         parameters: endpointConfig.parameters,
         description: endpointConfig.description,
         cacheTime: endpointConfig.cacheTime,
-        jobId: jobId, // 🔧 NEW: Link to the job that created this endpoint
+        jobId: jobId,
       },
       update: {
         query: originalConfig.originalQuery,
@@ -310,35 +325,114 @@ export class DynamicApiService {
         description: endpointConfig.description,
         cacheTime: endpointConfig.cacheTime,
         lastUsed: new Date(),
-        jobId: jobId, // 🔧 NEW: Update jobId if endpoint already exists
+        jobId: jobId,
       },
     });
   }
 
   /**
-   * 📊 Execute dynamic API endpoint
+   * Execute dynamic API endpoint
    */
   async executeDynamicApi(
     path: string,
     queryParams: Record<string, any> = {}
   ): Promise<DynamicApiResponse> {
-    this.logger.log(`🔍 Executing dynamic API: ${path}`);
+    this.logger.log(`Executing dynamic API: ${path}`);
 
     try {
-      // Get endpoint config from database
-      const endpoint = await this.prisma.apiEndpoint.findUnique({
-        where: { path },
-      });
-
-      let endpointToUse = endpoint;
+      let endpointToUse = null;
+      
+      if (path === '/api/dynamic/transfers' && queryParams.job_id) {
+        const jobId = queryParams.job_id;
+        this.logger.log(`Looking up endpoint by job_id: ${jobId}`);
+        
+        const endpointByJobId = await this.prisma.apiEndpoint.findFirst({
+          where: { jobId },
+        });
+        
+        if (endpointByJobId) {
+          this.logger.log(`Found endpoint by job_id: ${endpointByJobId.path} (job: ${jobId})`);
+          
+          const job = await this.prisma.indexingJob.findUnique({
+            where: { id: jobId },
+          });
+          
+          if (job) {
+            const jobConfig = job.config as unknown as IndexingConfig;
+            this.logger.log(`Job config addresses: ${JSON.stringify(jobConfig.addresses || [])}`);
+            this.logger.log(`Job addresses field: ${JSON.stringify(job.addresses || [])}`);
+            this.logger.log(`Job config fromBlock: ${jobConfig.fromBlock}, toBlock: ${jobConfig.toBlock}`);
+            this.logger.log(`Original query: ${job.query}`);
+            
+            const filteredAddresses = this.filterAddressesByQuery(job.query, jobConfig.addresses || job.addresses || []);
+            this.logger.log(`Filtered addresses based on query: ${JSON.stringify(filteredAddresses)}`);
+            
+            const filteredConfig: IndexingConfig = {
+              ...jobConfig,
+              addresses: filteredAddresses,
+            };
+            
+            const regeneratedSql = this.generateSqlQuery(filteredConfig);
+            
+            if (endpointByJobId.sqlQuery !== regeneratedSql) {
+              this.logger.log(`SQL query differs from job config - updating endpoint with correct query`);
+              endpointByJobId.sqlQuery = regeneratedSql;
+              await this.prisma.apiEndpoint.update({
+                where: { id: endpointByJobId.id },
+                data: { sqlQuery: regeneratedSql },
+              });
+              this.logger.log(`Updated endpoint SQL query to match filtered job config`);
+            } else {
+              this.logger.log(`Endpoint SQL query matches filtered job config`);
+            }
+          }
+          
+          endpointToUse = endpointByJobId;
+        } else {
+          this.logger.warn(`No endpoint found for job_id: ${jobId} - will use default transfers endpoint`);
+        }
+      }
       
       if (!endpointToUse) {
-        // Try to create default endpoints if the requested one doesn't exist
+        if (path === '/api/dynamic/transfers' && !queryParams.job_id) {
+          this.logger.log('No job_id provided - looking for default transfers endpoint (jobId: null)');
+          
+          endpointToUse = await this.prisma.apiEndpoint.findFirst({
+            where: { 
+              path: '/api/dynamic/transfers',
+              jobId: null
+            },
+          });
+          
+          if (!endpointToUse) {
+            this.logger.log('Default endpoint not found, creating...');
+            await this.createDefaultTransfersEndpoint();
+            
+            endpointToUse = await this.prisma.apiEndpoint.findFirst({
+              where: { 
+                path: '/api/dynamic/transfers',
+                jobId: null
+              },
+            });
+            
+            if (!endpointToUse) {
+              throw new Error(`Failed to create default endpoint ${path}`);
+            }
+          }
+          
+          this.logger.log('Using default transfers endpoint (all transfers, no filtering)');
+        } else {
+          endpointToUse = await this.prisma.apiEndpoint.findUnique({
+        where: { path },
+      });
+        }
+      }
+      
+      if (!endpointToUse) {
         if (path === '/api/dynamic/transfers') {
-          this.logger.log('🔄 Transfers endpoint not found, creating default...');
+          this.logger.log('Transfers endpoint not found, creating default...');
           await this.createDefaultTransfersEndpoint();
           
-          // Try to get the endpoint again
           const newEndpoint = await this.prisma.apiEndpoint.findUnique({
             where: { path },
           });
@@ -347,16 +441,14 @@ export class DynamicApiService {
             throw new Error(`Failed to create endpoint ${path}`);
           }
           
-          // 🔧 FIXED: Use the newly created endpoint
           endpointToUse = newEndpoint;
         } else {
           throw new Error(`Endpoint ${path} not found`);
         }
       }
 
-      // 🔧 FIXED: Ensure endpoint is not null before accessing sqlQuery
       if (!endpointToUse || !endpointToUse.sqlQuery) {
-        this.logger.error(`❌ Endpoint ${path} configuration error:`, {
+        this.logger.error(`Endpoint ${path} configuration error:`, {
           endpointExists: !!endpointToUse,
           hasSqlQuery: !!endpointToUse?.sqlQuery,
           endpointData: endpointToUse
@@ -364,14 +456,21 @@ export class DynamicApiService {
         throw new Error(`Endpoint ${path} is missing required configuration (sqlQuery)`);
       }
 
-      this.logger.log(`✅ Using endpoint configuration:`, {
+      this.logger.log(`Using endpoint configuration:`, {
         path: endpointToUse.path,
+        jobId: endpointToUse.jobId,
         hasSqlQuery: !!endpointToUse.sqlQuery,
-        hasParameters: !!endpointToUse.parameters
+        hasParameters: !!endpointToUse.parameters,
+        originalQuery: endpointToUse.query
       });
 
-      // Build dynamic query
+      if (endpointToUse.sqlQuery) {
+        this.logger.debug(`SQL Query (first 200 chars): ${endpointToUse.sqlQuery.substring(0, 200)}...`);
+      }
+
       const { query, countQuery } = this.buildDynamicQuery(endpointToUse.sqlQuery, queryParams);
+      
+      this.logger.debug(`Final SQL Query: ${query.substring(0, 300)}...`);
       
       // Execute queries
       const [data, countResult] = await Promise.all([
@@ -380,8 +479,6 @@ export class DynamicApiService {
       ]);
 
       const total = countResult[0]?.count || 0;
-      
-      // Update usage statistics
       await this.updateEndpointUsage(path);
 
       return {
@@ -400,13 +497,13 @@ export class DynamicApiService {
       };
 
     } catch (error) {
-      this.logger.error(`❌ Failed to execute API ${path}:`, error);
+      this.logger.error(`Failed to execute API ${path}:`, error);
       throw error;
     }
   }
 
   /**
-   * 🔧 Build dynamic query with parameters
+   * Build dynamic query with parameters
    */
   private buildDynamicQuery(
     baseSql: string,
@@ -415,7 +512,6 @@ export class DynamicApiService {
     
     let dynamicFilters = '';
     
-    // Add parameter-based filters
     if (params.address) {
       dynamicFilters += ` AND (t."from" ILIKE '%${params.address}%' OR t."to" ILIKE '%${params.address}%')`;
     }
@@ -440,7 +536,6 @@ export class DynamicApiService {
       dynamicFilters += ` AND CAST(t.value AS DECIMAL) <= ${parseFloat(params.maxValue)}`;
     }
 
-    // Always quote blockNumber, gasUsed, gasPrice, txHash, and name in ORDER BY and SELECT
     const sortByColumn = this.getSortByColumn(params.sortBy || 'timestamp');
 
     let safeBaseSql = baseSql
@@ -457,7 +552,6 @@ export class DynamicApiService {
       .replace('{{LIMIT}}', params.limit || '100')
       .replace('{{OFFSET}}', params.offset || '0');
 
-    // Create count query
     const countQuery = `
       SELECT COUNT(*) as count
       FROM "Transfer" t
@@ -469,7 +563,7 @@ export class DynamicApiService {
   }
 
   /**
-   * 🔧 Get properly quoted sort column name
+   * Get properly quoted sort column name
    */
   private getSortByColumn(sortBy: string): string {
     const columnMap: Record<string, string> = {
@@ -485,20 +579,19 @@ export class DynamicApiService {
   }
 
   /**
-   * 📈 Update endpoint usage statistics
+   * Update endpoint usage statistics
    */
   private async updateEndpointUsage(path: string): Promise<void> {
     await this.prisma.apiEndpoint.update({
       where: { path },
       data: {
         lastUsed: new Date(),
-        // Note: useCount increment would need raw SQL in Prisma
       },
     });
   }
 
   /**
-   * 📋 List all available dynamic endpoints
+   * List all available dynamic endpoints
    */
   async listAvailableEndpoints(): Promise<any[]> {
     const endpoints = await this.prisma.apiEndpoint.findMany({
@@ -516,23 +609,24 @@ export class DynamicApiService {
   }
 
   /**
-   * 🔧 Create default transfers endpoint if none exists
+   * Create default transfers endpoint if none exists (jobId: null)
    */
   async createDefaultTransfersEndpoint(): Promise<void> {
-    this.logger.log('🔧 Creating default transfers endpoint...');
+    this.logger.log('Creating default transfers endpoint (jobId: null)...');
 
     try {
-      // Check if transfers endpoint already exists
-      const existingEndpoint = await this.prisma.apiEndpoint.findUnique({
-        where: { path: '/api/dynamic/transfers' },
+      const existingEndpoint = await this.prisma.apiEndpoint.findFirst({
+        where: { 
+          path: '/api/dynamic/transfers',
+          jobId: null
+        },
       });
 
       if (existingEndpoint) {
-        this.logger.log('✅ Transfers endpoint already exists');
+        this.logger.log('Default transfers endpoint already exists (jobId: null)');
         return;
       }
 
-      // Create default transfers endpoint
       const defaultConfig = {
         path: '/api/dynamic/transfers',
         query: 'Show me all token transfers',
@@ -573,56 +667,61 @@ export class DynamicApiService {
         cacheTime: 300,
       };
 
-      await this.prisma.apiEndpoint.create({
-        data: defaultConfig,
+      await this.prisma.apiEndpoint.upsert({
+        where: { path: '/api/dynamic/transfers' },
+        create: {
+          ...defaultConfig,
+          jobId: null,
+        },
+        update: {
+          jobId: null,
+          sqlQuery: defaultConfig.sqlQuery,
+          query: defaultConfig.query,
+          description: defaultConfig.description,
+          parameters: defaultConfig.parameters,
+        },
       });
 
-      this.logger.log('✅ Created default transfers endpoint: /api/dynamic/transfers');
+      this.logger.log('Created/updated default transfers endpoint: /api/dynamic/transfers (jobId: null)');
 
     } catch (error) {
-      this.logger.error('❌ Failed to create default transfers endpoint:', error);
+      this.logger.error('Failed to create default transfers endpoint:', error);
       throw error;
     }
   }
 
   /**
-   * 🔧 Initialize default endpoints
+   * Initialize default endpoints
    */
   async initializeDefaultEndpoints(): Promise<void> {
-    this.logger.log('🚀 Initializing default API endpoints...');
+    this.logger.log('Initializing default API endpoints...');
     
     try {
-      // Create default transfers endpoint
       await this.createDefaultTransfersEndpoint();
       
-      // Generate API endpoints from any existing completed jobs
       const completedJobs = await this.prisma.indexingJob.findMany({
         where: { status: 'completed' },
       });
       
       for (const job of completedJobs) {
         try {
-          this.logger.log(`🔧 Generating API endpoint for completed job ${job.id}`);
+          this.logger.log(`Generating API endpoint for completed job ${job.id}`);
           await this.generateApiFromJob(job.id);
         } catch (error) {
-          this.logger.error(`❌ Failed to generate API for job ${job.id}:`, error);
+          this.logger.error(`Failed to generate API for job ${job.id}:`, error);
         }
       }
       
-      this.logger.log('✅ Default endpoints initialized');
+      this.logger.log('Default endpoints initialized');
     } catch (error) {
-      this.logger.error('❌ Failed to initialize default endpoints:', error);
+      this.logger.error('Failed to initialize default endpoints:', error);
     }
   }
 
   /**
-   * 📄 Create a new API endpoint
-   */
-  /**
-   * 📄 Create or update API endpoint (handles duplicates)
+   * Create or update API endpoint (handles duplicates)
    */
   async createApiEndpoint(jobId: string, path: string, query: string, sqlQuery: string): Promise<void> {
-    // Use UPSERT instead of CREATE to handle duplicates
     const endpoint = await this.prisma.apiEndpoint.upsert({
       where: { path },
       create: {
@@ -633,14 +732,13 @@ export class DynamicApiService {
         description: `Auto-generated endpoint for: ${query}`,
       },
       update: {
-        query, // Update with latest query
-        sqlQuery, // Update with latest SQL
-        lastUsed: new Date(), // Mark as recently used
+        query,
+        sqlQuery,
+        lastUsed: new Date(),
         description: `Auto-generated endpoint for: ${query}`,
       },
     });
 
-    // 🚀 EMIT WEBSOCKET EVENT FOR NEW/UPDATED API
     this.indexerGateway.emitApiCreated({
       jobId: jobId,
       path: endpoint.path,
@@ -649,6 +747,6 @@ export class DynamicApiService {
       timestamp: new Date(),
     });
 
-    this.logger.log(`🔗 Created/updated API endpoint: ${path}`);
+    this.logger.log(`Created/updated API endpoint: ${path}`);
   }
 }
