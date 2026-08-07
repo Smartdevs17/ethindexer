@@ -40,6 +40,8 @@ export default function JobsPage() {
   });
   const [showFilters, setShowFilters] = useState(false);
   const [copiedJobId, setCopiedJobId] = useState<string | null>(null);
+  const [cancellingJobId, setCancellingJobId] = useState<string | null>(null);
+  const [cleaningUp, setCleaningUp] = useState(false);
   
   const { isConnected } = useAccount();
   const { 
@@ -47,7 +49,9 @@ export default function JobsPage() {
     fetchJobs, 
     isAuthenticated, 
     isConnected: isBackendConnected,
-    forceRefreshJobs 
+    forceRefreshJobs,
+    cancelJob,
+    cleanupStuckJobs
   } = useEthIndexer();
 
 
@@ -210,6 +214,56 @@ export default function JobsPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleCancelJob = async (jobId: string) => {
+    if (!confirm('Are you sure you want to cancel this job?')) {
+      return;
+    }
+    
+    setCancellingJobId(jobId);
+    try {
+      await cancelJob(jobId, 'Cancelled by user');
+      alert('Job cancelled successfully');
+    } catch (error) {
+      alert(`Failed to cancel job: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setCancellingJobId(null);
+    }
+  };
+
+  const handleCleanupStuckJobs = async () => {
+    if (!confirm('This will mark all active jobs older than 24 hours as failed. Continue?')) {
+      return;
+    }
+    
+    setCleaningUp(true);
+    try {
+      const result = await cleanupStuckJobs(24);
+      alert(`Cleaned up ${result.cleaned || 0} stuck job(s)`);
+    } catch (error) {
+      alert(`Failed to cleanup stuck jobs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
+  // Calculate job duration
+  const getJobDuration = (job: any): string => {
+    const jobDate = job.timestamp instanceof Date ? job.timestamp : new Date(job.timestamp);
+    const now = new Date();
+    const diffMs = now.getTime() - jobDate.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffDays = Math.floor(diffHours / 24);
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffDays > 0) {
+      return `${diffDays} day${diffDays > 1 ? 's' : ''} ${diffHours % 24} hour${diffHours % 24 !== 1 ? 's' : ''}`;
+    } else if (diffHours > 0) {
+      return `${diffHours} hour${diffHours > 1 ? 's' : ''} ${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`;
+    } else {
+      return `${diffMinutes} minute${diffMinutes !== 1 ? 's' : ''}`;
+    }
+  };
+
   // 🔧 NEW: Generate a unique job ID from available job data
   function generateJobIdFromData(job: any): string {
     // Try to create a unique ID from timestamp and message hash
@@ -249,6 +303,16 @@ export default function JobsPage() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </button>
+          {stats.active > 0 && (
+            <button
+              onClick={handleCleanupStuckJobs}
+              disabled={cleaningUp}
+              className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Trash2 className="h-4 w-4" />
+              {cleaningUp ? 'Cleaning...' : 'Cleanup Stuck Jobs'}
+            </button>
+          )}
           <button
             onClick={() => setShowFilters(!showFilters)}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
@@ -409,6 +473,12 @@ export default function JobsPage() {
                           : new Date(job.timestamp).toLocaleDateString()
                         }
                       </div>
+                      {(job.status === 'active' || job.status === 'processing') && (
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-4 w-4" />
+                          Running for {getJobDuration(job)}
+                        </div>
+                      )}
                       {job.progress !== undefined && (
                         <div className="flex items-center gap-1">
                           <Activity className="h-4 w-4" />
@@ -445,6 +515,20 @@ export default function JobsPage() {
                             Test
                           </button>
                         </div>
+                      </div>
+                    )}
+                    
+                    {/* Cancel button for active jobs */}
+                    {(job.status === 'active' || job.status === 'processing') && job.jobId && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => handleCancelJob(job.jobId!)}
+                          disabled={cancellingJobId === job.jobId}
+                          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          {cancellingJobId === job.jobId ? 'Cancelling...' : 'Cancel Job'}
+                        </button>
                       </div>
                     )}
                   </div>

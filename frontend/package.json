@@ -8,7 +8,7 @@
     ]
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "cd packages/nextjs && yarn dev",
     "build": "next build",
     "start": "next start"
   },

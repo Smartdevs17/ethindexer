@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { IndexerService } from '../indexer/indexer.service';
@@ -23,8 +23,9 @@ export interface JobStatus {
 }
 
 @Injectable()
-export class OrchestratorService {
+export class OrchestratorService implements OnModuleDestroy {
   private readonly logger = new Logger(OrchestratorService.name);
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -32,7 +33,40 @@ export class OrchestratorService {
     private readonly indexerService: IndexerService,
     private readonly indexerGateway: IndexerGateway,
     private readonly usersService: UsersService,
-  ) {}
+  ) {
+    // Start automatic cleanup of stuck jobs every 6 hours
+    this.startAutomaticCleanup();
+  }
+
+  /**
+   * Start automatic cleanup of stuck jobs
+   */
+  private startAutomaticCleanup() {
+    // Run cleanup immediately on startup
+    this.cleanupStuckJobs(24).catch(error => {
+      this.logger.error('Failed to run initial cleanup:', error);
+    });
+
+    // Then run cleanup every 6 hours
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupStuckJobs(24).catch(error => {
+        this.logger.error('Failed to run scheduled cleanup:', error);
+      });
+    }, 6 * 60 * 60 * 1000); // 6 hours
+
+    this.logger.log('🧹 Automatic cleanup of stuck jobs started (runs every 6 hours)');
+  }
+
+  /**
+   * Stop automatic cleanup (useful for testing or graceful shutdown)
+   */
+  onModuleDestroy() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+      this.logger.log('🧹 Automatic cleanup stopped');
+    }
+  }
 
   /**
    * Main orchestration method: Natural Language → AI → Smart Caching → Indexing
@@ -574,5 +608,115 @@ export class OrchestratorService {
     return this.prisma.indexingJob.count({
       where: { status: 'active' },
     });
+  }
+
+  /**
+   * Cancel or fail a specific job
+   */
+  async cancelJob(jobId: string, reason?: string): Promise<boolean> {
+    try {
+      const job = await this.prisma.indexingJob.findUnique({
+        where: { id: jobId },
+      });
+
+      if (!job) {
+        throw new Error(`Job ${jobId} not found`);
+      }
+
+      if (job.status === 'completed') {
+        throw new Error(`Job ${jobId} is already completed`);
+      }
+
+      await this.prisma.indexingJob.update({
+        where: { id: jobId },
+        data: {
+          status: 'error',
+          completedAt: new Date(),
+          progress: 0,
+        },
+      });
+
+      this.indexerGateway.emitJobProgress({
+        jobId,
+        progress: 0,
+        status: 'error',
+        message: reason || 'Job cancelled by user',
+        timestamp: new Date(),
+      });
+
+      this.logger.log(`🚫 Job ${jobId} cancelled: ${reason || 'No reason provided'}`);
+      return true;
+    } catch (error) {
+      this.logger.error(`❌ Failed to cancel job ${jobId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cleanup stuck jobs - mark active jobs older than specified hours as failed
+   */
+  async cleanupStuckJobs(maxAgeHours: number = 24): Promise<{ cleaned: number; jobs: string[] }> {
+    try {
+      const cutoffTime = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+      
+      // Find all active jobs older than the cutoff time
+      const stuckJobs = await this.prisma.indexingJob.findMany({
+        where: {
+          status: 'active',
+          updatedAt: {
+            lt: cutoffTime,
+          },
+        },
+        select: {
+          id: true,
+          query: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (stuckJobs.length === 0) {
+        this.logger.log(`✅ No stuck jobs found (checking jobs older than ${maxAgeHours} hours)`);
+        return { cleaned: 0, jobs: [] };
+      }
+
+      const jobIds = stuckJobs.map(job => job.id);
+
+      // Mark all stuck jobs as failed
+      await this.prisma.indexingJob.updateMany({
+        where: {
+          id: {
+            in: jobIds,
+          },
+        },
+        data: {
+          status: 'error',
+          completedAt: new Date(),
+          progress: 0,
+        },
+      });
+
+      // Emit WebSocket events for each cancelled job
+      for (const job of stuckJobs) {
+        const ageHours = Math.round((Date.now() - job.updatedAt.getTime()) / (1000 * 60 * 60));
+        this.indexerGateway.emitJobProgress({
+          jobId: job.id,
+          progress: 0,
+          status: 'error',
+          message: `Job marked as failed (stuck for ${ageHours} hours)`,
+          timestamp: new Date(),
+        });
+      }
+
+      this.logger.log(`🧹 Cleaned up ${stuckJobs.length} stuck jobs (older than ${maxAgeHours} hours)`);
+      
+      return {
+        cleaned: stuckJobs.length,
+        jobs: jobIds,
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to cleanup stuck jobs:`, error);
+      throw error;
+    }
   }
 }

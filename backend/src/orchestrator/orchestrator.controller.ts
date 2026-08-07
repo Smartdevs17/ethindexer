@@ -107,5 +107,59 @@ export class OrchestratorController {
       },
     };
   }
+
+  /**
+   * Cancel a specific job
+   * POST /orchestrator/job/:jobId/cancel
+   */
+  @Post('job/:jobId/cancel')
+  async cancelJob(
+    @Param('jobId') jobId: string,
+    @Body() body?: { reason?: string }
+  ) {
+    try {
+      const cancelled = await this.orchestratorService.cancelJob(jobId, body?.reason);
+      
+      return {
+        success: true,
+        message: `Job ${jobId} cancelled successfully`,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to cancel job ${jobId}:`, error);
+      return {
+        success: false,
+        message: error.message || 'Failed to cancel job',
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Cleanup stuck jobs (mark active jobs older than X hours as failed)
+   * POST /orchestrator/cleanup?maxAgeHours=24
+   */
+  @Post('cleanup')
+  async cleanupStuckJobs(@Query('maxAgeHours') maxAgeHours?: string) {
+    try {
+      const hours = maxAgeHours ? parseInt(maxAgeHours) : 24;
+      const result = await this.orchestratorService.cleanupStuckJobs(hours);
+      
+      return {
+        success: true,
+        cleaned: result.cleaned,
+        jobIds: result.jobs,
+        message: `Cleaned up ${result.cleaned} stuck job(s)`,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      this.logger.error(`❌ Failed to cleanup stuck jobs:`, error);
+      return {
+        success: false,
+        message: error.message || 'Failed to cleanup stuck jobs',
+        timestamp: new Date(),
+      };
+    }
+  }
 }
 

@@ -532,6 +532,65 @@ export const useEthIndexer = () => {
     addDebugInfo('🔄 Manual job refresh completed');
   };
 
+  // Cancel a specific job
+  const cancelJob = async (jobId: string, reason?: string) => {
+    try {
+      console.log(`🚫 Cancelling job ${jobId}...`);
+      const response = await fetch(`${apiUrl}/orchestrator/job/${jobId}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          addDebugInfo(`✅ Job ${jobId} cancelled successfully`);
+          // Refresh jobs to get updated status
+          await fetchJobs();
+          return true;
+        } else {
+          throw new Error(data.message || 'Failed to cancel job');
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error(`❌ Failed to cancel job ${jobId}:`, error);
+      addDebugInfo(`Failed to cancel job: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
+  };
+
+  // Cleanup stuck jobs (mark active jobs older than X hours as failed)
+  const cleanupStuckJobs = async (maxAgeHours: number = 24) => {
+    try {
+      console.log(`🧹 Cleaning up stuck jobs (older than ${maxAgeHours} hours)...`);
+      const response = await fetch(`${apiUrl}/orchestrator/cleanup?maxAgeHours=${maxAgeHours}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          addDebugInfo(`✅ Cleaned up ${data.cleaned || 0} stuck job(s)`);
+          // Refresh jobs to get updated status
+          await fetchJobs();
+          return data;
+        } else {
+          throw new Error(data.message || 'Failed to cleanup stuck jobs');
+        }
+      } else {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to cleanup stuck jobs:', error);
+      addDebugInfo(`Failed to cleanup stuck jobs: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw error;
+    }
+  };
+
   // Fetch existing transfers from API
   const fetchTransfers = async () => {
     try {
@@ -743,6 +802,8 @@ export const useEthIndexer = () => {
     createJob,
     fetchJobs,
     forceRefreshJobs, // Add this for debugging
+    cancelJob,
+    cleanupStuckJobs,
     fetchTransfers, // Add this to the return object
     fetchLiveDataStats, // Add live data stats function
     getStats,
